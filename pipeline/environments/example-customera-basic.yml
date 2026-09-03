@@ -1,61 +1,34 @@
-# One variables file per Azure Local cluster / tenant. Add a new file here to onboard a new
-# customer or cluster, then add its file name (without .yml) to the `environmentFile` allowed
-# values list in pipeline/azure-pipelines.yml.
+# One minimal variables file per Azure Local cluster / tenant. Add a new file here to onboard a
+# new customer or cluster, then add its base file name (without extension) to the
+# `environmentFile` allowed values list in pipeline/azure-pipelines.yml.
+#
+# All Bicep template parameters (thresholds, receivers, service-tier, resource IDs, etc.) live in
+# the companion example-customera-basic.bicepparam file next to this one - that is the file to
+# edit when tuning alert thresholds or onboarding scope. This YAML file only carries the
+# non-template, pipeline-level metadata that a .bicepparam file cannot express: which Azure
+# DevOps service connection/tenant to deploy with, the subscription context, and (for the
+# script's pre-flight DCR event-log check only, not a Bicep parameter) the DCR resource ID.
 #
 # Committing these values in git (instead of an Azure DevOps variable group/library) is the
 # intentional "config as code" approach requested: the CD pipeline re-applies exactly what is
 # committed here on every run, so manual portal edits (drift) get reverted on the next merge to
 # main instead of silently persisting.
-#
-# NOTE: Do not commit real secrets here. Service connection names are safe to commit (they only
-# reference an Azure DevOps service connection, not a credential). Webhook URLs that embed
-# secrets/tokens should instead be stored in an Azure DevOps variable group and referenced here
-# via pipeline variable substitution if your organization requires that.
 
 variables:
   # Which Azure DevOps service connection (Azure Resource Manager) to deploy with.
   # This determines which Azure AD tenant / subscription the pipeline authenticates to.
   serviceConnection: 'sc-customera-prod'
 
+  # Subscription the service connection authenticates to - used for `az account set --subscription`
+  # before validating/deploying. Must match the subscription referenced by the resource IDs in
+  # the companion .bicepparam file.
   subscriptionId: '00000000-0000-0000-0000-000000000000'
-  resourceGroupName: 'rg-azurelocal-customera-prod'
-  location: 'westeurope'
 
-  serviceTier: 'Basic'
+  # Path (relative to repo root) to this customer's Bicep parameters file.
+  bicepParamFile: 'pipeline/environments/example-customera-basic.bicepparam'
 
-  clusterResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomera'
-  # Basic tier has no Log Analytics dependency - leave empty.
-  logAnalyticsWorkspaceResourceId: ''
-
-  actionGroupName: 'ag-azurelocal-customera-prod'
-  actionGroupShortName: 'azlalerts'
-
-  # JSON arrays passed straight through to Deploy-AzureLocalAlerts.ps1.
-  emailReceiversJson: '[{"name":"fmp-ops","emailAddress":"azurelocal-ops@example.com","useCommonAlertSchema":true}]'
-  webhookReceiversJson: '[{"name":"fmp-itsm-webhook","serviceUri":"https://example.freshservice.com/api/v2/webhook/azurelocal-alerts","useCommonAlertSchema":true}]'
-
-  cpuThresholdPercent: '85'
-  memoryThresholdPercent: '85'
-  storageFreeBytesThreshold: '214748364800'
-  memoryAvailableBytesThreshold: '1073741824'
-  volumeLatencyReadThresholdSeconds: '0.5'
-  volumeLatencyWriteThresholdSeconds: '0.5'
-  networkInThresholdBytesPerSecond: '500000000000'
-  networkOutThresholdBytesPerSecond: '200000000000'
-  includeServiceHealth: 'true'
-  suppressionWindowsJson: '[]'
-  # Suppress action-group notifications outside the committed Basic service window (per the
-  # service description: "alerts will only be responded to during service window"). Alert rules
-  # still evaluate 24/7 - only notifications are silenced outside these hours.
-  enableOffHoursSuppression: 'true'
-  serviceHoursStart: '07:00:00'
-  serviceHoursEnd: '17:00:00'
-  serviceHoursTimeZone: 'Romance Standard Time'
-  # Optional throttle for log-based alerts (ignored - Basic has none): ISO 8601 duration (e.g.
-  # 'PT1H') for repeat notifications while an alert remains unresolved. Empty = stateful/single-fire.
-  logAlertsMuteActionsDuration: ''
-  # Ignored - Basic has no log-based alerts, so the critical-service-watchdog list and DCR
-  # extension (which only affect log alerts) never apply here.
-  criticalServiceNamesJson: '[]'
+  # ARM resource ID of the Data Collection Rule collecting this cluster's Windows Event Logs.
+  # Leave empty to attempt auto-discovery from an Arc node in clusterResourceId's resource group.
+  # Ignored for Basic tier (no log-based alerts). Not a Bicep template parameter - used only by
+  # Deploy-AzureLocalAlerts.ps1's pre-flight DCR extension check.
   dcrResourceId: ''
-  heartbeatMissingMinutes: '10'
