@@ -88,6 +88,9 @@
     "serviceHoursTimeZone": {
       "value": "Romance Standard Time"
     },
+    "logAlertsMuteActionsDuration": {
+      "value": ""
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

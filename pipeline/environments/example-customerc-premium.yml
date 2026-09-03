@@ -37,4 +37,9 @@ variables:
   serviceHoursStart: '07:00:00'
   serviceHoursEnd: '17:00:00'
   serviceHoursTimeZone: 'Romance Standard Time'
+  # Optional throttle for the log-based alerts (heartbeat/volume health/error-rate): ISO 8601
+  # duration (e.g. 'PT1H') for repeat notifications while an alert remains unresolved - useful for
+  # Premium's 24/7 on-call to be re-paged periodically on a long-running unresolved incident.
+  # Empty (default) = stateful/single-fire (one Fired, one Resolved notification).
+  logAlertsMuteActionsDuration: ''
   heartbeatMissingMinutes: '10'

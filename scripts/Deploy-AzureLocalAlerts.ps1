@@ -81,6 +81,16 @@
 .PARAMETER ServiceHoursTimeZone
     Windows time zone name the service-hours window is evaluated in. Default 'Romance Standard Time'.
 
+.PARAMETER LogAlertsMuteActionsDuration
+    Optional throttle for the Advanced/Premium log-based alerts (heartbeat, volume health, and the
+    Premium error-rate alert): ISO 8601 duration (e.g. "PT1H", "PT30M") for which repeat
+    notifications are suppressed after firing, while the condition remains true. When set, this
+    switches from the default "one Fired notification, then silent until Resolved" (stateful)
+    behavior to periodic re-notification every LogAlertsMuteActionsDuration for as long as the
+    issue persists. NOT supported by Azure Monitor metric alerts (no ARM equivalent exists for
+    Microsoft.Insights/metricAlerts) - those remain purely stateful regardless of this setting.
+    Default '' (disabled).
+
 .PARAMETER DeploymentStackName
     Name of the deployment stack resource. Defaults to "stack-azurelocal-alerts-<ResourceGroupName>".
     Re-running with the same name updates the existing stack; a different name creates a new one.
@@ -187,6 +197,9 @@ param(
     [string]$ServiceHoursTimeZone = 'Romance Standard Time',
 
     [Parameter(Mandatory = $false)]
+    [string]$LogAlertsMuteActionsDuration = '',
+
+    [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
 
     [Parameter(Mandatory = $false)]
@@ -287,6 +300,22 @@ function Test-LogAnalyticsWorkspaceExists {
     Write-Host "==> Log Analytics workspace confirmed (provisioningState: $($workspace.properties.provisioningState))." -ForegroundColor Green
 }
 
+function Assert-IsoDuration {
+    <#
+        Validates an ISO 8601 duration string (e.g. "PT1H", "PT30M", "P1D") up front, so a
+        malformed -LogAlertsMuteActionsDuration fails fast with a clear message instead of a
+        deep ARM error. Empty string is allowed (means "disabled").
+    #>
+    param([string]$Value, [string]$ParamName)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+    if ($Value -notmatch '^P(?!$)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?$') {
+        throw "$ParamName '$Value' is not a valid ISO 8601 duration (e.g. 'PT1H' for 1 hour, 'PT30M' for 30 minutes)."
+    }
+}
+
 Write-Host "==> Validating parameters for tier '$ServiceTier'..." -ForegroundColor Cyan
 
 if ($ServiceTier -in @('Advanced', 'Premium') -and [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceResourceId)) {
@@ -303,6 +332,11 @@ Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
 $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
 $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
 $suppressionWindows = Assert-SuppressionWindows -Json $SuppressionWindowsJson
+Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
+
+if ($ServiceTier -eq 'Basic' -and -not [string]::IsNullOrWhiteSpace($LogAlertsMuteActionsDuration)) {
+    Write-Warning "LogAlertsMuteActionsDuration is set but ServiceTier is 'Basic' - Basic has no log-based alerts, so this setting has no effect."
+}
 
 if ($emailReceivers.Count -eq 0 -and $webhookReceivers.Count -eq 0) {
     Write-Warning "No email or webhook receivers supplied. Alerts will fire with nobody notified."
@@ -362,6 +396,7 @@ $templateParameters = @(
     "serviceHoursStart=$ServiceHoursStart",
     "serviceHoursEnd=$ServiceHoursEnd",
     "serviceHoursTimeZone=$ServiceHoursTimeZone",
+    "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 

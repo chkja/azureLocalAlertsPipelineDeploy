@@ -108,6 +108,13 @@ param serviceHoursEnd string = '17:00:00'
 @description('Windows time zone name the service-hours window is evaluated in.')
 param serviceHoursTimeZone string = 'Romance Standard Time'
 
+@description('''
+Optional throttle for the Advanced/Premium log-based alerts: ISO 8601 duration (e.g. "PT1H") for
+which repeat notifications are suppressed after firing, while the condition remains true. Not
+supported by Azure Monitor metric alerts. Default: '' (disabled - stateful, single notification).
+''')
+param logAlertsMuteActionsDuration string = ''
+
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
@@ -145,6 +152,7 @@ module alerts 'modules/alerts.bicep' = {
     serviceHoursStart: serviceHoursStart
     serviceHoursEnd: serviceHoursEnd
     serviceHoursTimeZone: serviceHoursTimeZone
+    logAlertsMuteActionsDuration: logAlertsMuteActionsDuration
   }
   dependsOn: [
     rg

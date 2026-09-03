@@ -37,7 +37,19 @@ param includePremiumAlerts bool = false
 @description('Severity for the Premium-only enhanced monitoring alert.')
 param severityPremium int = 2
 
+@description('Whether alerts auto-resolve when the condition clears. Ignored (forced to false) when muteActionsDuration is set.')
+param autoMitigate bool = true
+
+@description('''
+Optional throttle: ISO 8601 duration (e.g. "PT1H", "PT30M") for which repeat notifications are
+suppressed after an alert fires, while the condition remains true. See metricAlerts.bicep for the
+full explanation - same semantics apply here. Default: '' (disabled - stateful, single notification).
+''')
+param muteActionsDuration string = ''
+
 var clusterName = last(split(clusterResourceId, '/'))
+var useMuteActionsDuration = !empty(muteActionsDuration)
+var effectiveAutoMitigate = useMuteActionsDuration ? false : autoMitigate
 
 // ---------------------------------------------------------------------------
 // Advanced + Premium: node heartbeat / connectivity loss
@@ -74,7 +86,8 @@ resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-p
         actionGroupId
       ]
     }
-    autoMitigate: true
+    autoMitigate: effectiveAutoMitigate
+    muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
   }
 }
 
@@ -115,7 +128,8 @@ resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
         actionGroupId
       ]
     }
-    autoMitigate: true
+    autoMitigate: effectiveAutoMitigate
+    muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
   }
 }
 
@@ -157,7 +171,8 @@ resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
         actionGroupId
       ]
     }
-    autoMitigate: true
+    autoMitigate: effectiveAutoMitigate
+    muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
   }
 }
 

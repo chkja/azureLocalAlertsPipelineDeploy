@@ -251,6 +251,32 @@ Suppression rules match on the resource ID(s) in `modules/suppressionRules.bicep
 fired alert, not which alert rule created it, so a cluster-scoped suppression rule also silences
 the Premium subscription-wide Resource Health alert for that same cluster during the window.
 
+### Notification frequency - avoiding a flood while an issue is unresolved
+
+By default, **every alert rule in every tier is stateful and fires exactly once per incident**:
+one "Fired" notification when the condition transitions from OK to Fired, then silence for as
+long as it remains Fired (no repeat pings every evaluation cycle), then one "Resolved"
+notification when it clears (`autoMitigate: true`). This is true for all metric alerts (Basic/
+Advanced/Premium) and all log alerts (Advanced/Premium) - the target system is never flooded with
+repeated notifications for a single ongoing issue.
+
+Azure Monitor **metric alerts have no re-notification/throttle capability at all** - there is no
+ARM property to change this behavior; they are always exactly "one Fired, one Resolved".
+
+**Log alerts** (`scheduledQueryRules` - heartbeat, volume health, Premium error-rate) do support
+an optional throttle via the `logAlertsMuteActionsDuration` parameter / `logAlertsMuteActionsDuration`
+pipeline variable: an ISO 8601 duration (e.g. `PT1H`) after which, if the alert is *still* firing,
+one more notification is sent (repeating every `logAlertsMuteActionsDuration` for as long as the
+issue persists) - useful if you want an unresolved incident to page again after N hours rather
+than going silent until it resolves. Setting this automatically forces `autoMitigate: false` for
+log alerts under the hood (ARM requires these two settings to be mutually exclusive). Default:
+`''` (disabled - the stateful single-notification behavior described above).
+
+Activity Log alerts (Premium subscription-wide Resource/Service Health) have no equivalent
+property either way - they are event-driven off the Activity Log itself, not evaluation-based,
+and Microsoft's platform generally only logs discrete health-status transitions rather than a
+continuous stream, so in practice they behave similarly to a stateful alert without needing one.
+
 ## 4. Exploration commands - confirm signals before tuning thresholds
 
 Run these against a live cluster/workspace before relying on the default thresholds in
@@ -341,6 +367,7 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `enableOffHoursSuppression` | `true` (Basic/Advanced), `false` (Premium) | Standing weekly off-hours notification suppression, see section 3 |
 | `serviceHoursStart` / `serviceHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
 | `serviceHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the service-hours window |
+| `logAlertsMuteActionsDuration` | `''` (disabled) | Advanced/Premium log alerts only - re-notification throttle, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
 All are Bicep parameters - override per environment in `bicep/parameters/*.json` or per pipeline
