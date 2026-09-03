@@ -26,33 +26,51 @@
 .PARAMETER SubscriptionId
     Target subscription ID. The script runs `az account set` before deploying.
 
+.PARAMETER BicepParamFile
+    Path to a .bicepparam file (using bicep/main.bicep) carrying every template parameter for
+    one customer/cluster - the recommended way to configure a deployment. Mutually exclusive
+    with the individual -ServiceTier/-ResourceGroupName/-EmailReceiversJson/etc. parameters
+    below (ParameterSetName 'ByValue'): using -BicepParamFile selects ParameterSetName
+    'ByBicepParamFile' instead. The script compiles the file with `az bicep build-params` to
+    read back the handful of values (ServiceTier, ResourceGroupName, Location,
+    ClusterResourceId, LogAnalyticsWorkspaceResourceId) it needs for its own pre-flight checks
+    (Log Analytics workspace existence, DCR event-log auto-extension) and deployment-stack
+    naming/description - it does not re-validate every parameter the way -EmailReceiversJson
+    etc. are validated in ByValue mode; malformed values instead surface as a Bicep/ARM error
+    from `az stack sub create`/`validate`. The original .bicepparam file (not the compiled JSON)
+    is passed straight through to `az stack sub create/validate --parameters`.
+
 .PARAMETER ServiceTier
-    One of Basic, Advanced, Premium.
+    One of Basic, Advanced, Premium. (ByValue parameter set only - see -BicepParamFile.)
 
 .PARAMETER ResourceGroupName
     Resource group that will contain the alerting resources. Created automatically by
-    bicep/main.bicep if it does not already exist.
+    bicep/main.bicep if it does not already exist. (ByValue parameter set only.)
 
 .PARAMETER Location
     Azure region, e.g. westeurope. Used both for the resource group and the deployment stack.
+    (ByValue parameter set only.)
 
 .PARAMETER ClusterResourceId
-    ARM resource ID of the Microsoft.AzureStackHCI/clusters resource.
+    ARM resource ID of the Microsoft.AzureStackHCI/clusters resource. (ByValue parameter set only.)
 
 .PARAMETER LogAnalyticsWorkspaceResourceId
-    ARM resource ID of the Log Analytics workspace. Required for Advanced/Premium.
+    ARM resource ID of the Log Analytics workspace. Required for Advanced/Premium. (ByValue
+    parameter set only.)
 
 .PARAMETER ActionGroupName
-    Name of the Action Group resource.
+    Name of the Action Group resource. (ByValue parameter set only.)
 
 .PARAMETER ActionGroupShortName
-    Short name (max 12 chars) for the Action Group.
+    Short name (max 12 chars) for the Action Group. (ByValue parameter set only.)
 
 .PARAMETER EmailReceiversJson
     JSON array string: [{"name":"...", "emailAddress":"...", "useCommonAlertSchema":true}, ...]
+    (ByValue parameter set only.)
 
 .PARAMETER WebhookReceiversJson
     JSON array string: [{"name":"...", "serviceUri":"...", "useCommonAlertSchema":true}, ...]
+    (ByValue parameter set only.)
 
 .PARAMETER IncludeServiceHealth
     Premium tier only (ignored otherwise). Also deploys a subscription-wide Azure Service Health
@@ -133,6 +151,13 @@
     Switch. Run `az stack sub validate` instead of applying the deployment.
 
 .EXAMPLE
+    # Recommended: one .bicepparam file per customer/cluster (see pipeline/environments/*.bicepparam).
+    pwsh -File ./Deploy-AzureLocalAlerts.ps1 `
+      -SubscriptionId "00000000-0000-0000-0000-000000000000" `
+      -BicepParamFile "./pipeline/environments/example-customerb-advanced.bicepparam"
+
+.EXAMPLE
+    # ByValue parameter set: every template parameter passed explicitly (no .bicepparam file).
     pwsh -File ./Deploy-AzureLocalAlerts.ps1 `
       -SubscriptionId "00000000-0000-0000-0000-000000000000" `
       -ServiceTier "Advanced" `
@@ -145,96 +170,101 @@
       -EmailReceiversJson '[{"name":"ops","emailAddress":"ops@example.com"}]' `
       -WebhookReceiversJson '[{"name":"itsm","serviceUri":"https://example.com/webhook"}]'
 #>
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'ByValue')]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SubscriptionId,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByBicepParamFile')]
+    [string]$BicepParamFile,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [ValidateSet('Basic', 'Advanced', 'Premium')]
     [string]$ServiceTier,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [string]$ResourceGroupName,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [string]$Location,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [string]$ClusterResourceId,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$LogAnalyticsWorkspaceResourceId = '',
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [string]$ActionGroupName,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ByValue')]
     [ValidateLength(1, 12)]
     [string]$ActionGroupShortName,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$EmailReceiversJson = '[]',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$WebhookReceiversJson = '[]',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [int]$CpuThresholdPercent = 85,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [int]$MemoryThresholdPercent = 85,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [long]$StorageFreeBytesThreshold = 214748364800,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [long]$MemoryAvailableBytesThreshold = 1073741824,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$VolumeLatencyReadThresholdSeconds = '0.5',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$VolumeLatencyWriteThresholdSeconds = '0.5',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [long]$NetworkInThresholdBytesPerSecond = 500000000000,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [long]$NetworkOutThresholdBytesPerSecond = 200000000000,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [bool]$IncludeServiceHealth = $true,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$SuppressionWindowsJson = '[]',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [bool]$EnableOffHoursSuppression = $true,
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$ServiceHoursStart = '07:00:00',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$ServiceHoursEnd = '17:00:00',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$ServiceHoursTimeZone = 'Romance Standard Time',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$LogAlertsMuteActionsDuration = '',
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$CriticalServiceNamesJson = '["HciSvc","Health Service","mochostagent","MOC HostAgent","wssdcloudagent","WSSD Cloud Agent","wssdagent","WSSD Agent"]',
 
+    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
+    [int]$HeartbeatMissingMinutes = 10,
+
+    # Shared across both parameter sets: not Bicep template parameters, only used by this
+    # script's own pre-flight DCR discovery/extension logic.
     [Parameter(Mandatory = $false)]
     [string]$DcrResourceId = '',
 
     [Parameter(Mandatory = $false)]
     [switch]$SkipDcrUpdate,
-
-    [Parameter(Mandatory = $false)]
-    [int]$HeartbeatMissingMinutes = 10,
 
     [Parameter(Mandatory = $false)]
     [string]$DeploymentStackName = '',
@@ -252,6 +282,64 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Resolve-BicepParamFile {
+    <#
+        Compiles a .bicepparam file via `az bicep build-params` and returns the subset of values
+        (serviceTier, resourceGroupName, location, clusterResourceId,
+        logAnalyticsWorkspaceResourceId) this script needs for its own pre-flight checks (Log
+        Analytics workspace existence, DCR event-log auto-extension) and deployment-stack
+        naming/description. Deliberately does NOT re-validate every parameter the way ByValue
+        mode does (e.g. Assert-JsonArray on email/webhook receivers) - the .bicepparam file
+        itself is passed straight through to `az stack sub create/validate --parameters`
+        unchanged, so any other malformed value surfaces as a Bicep/ARM error from that command
+        instead.
+    #>
+    param([string]$Path)
+
+    if (-not (Test-Path -Path $Path)) {
+        throw "BicepParamFile '$Path' does not exist."
+    }
+    $resolvedPath = (Resolve-Path -Path $Path).Path
+
+    Write-Host "==> Compiling Bicep parameter file: $resolvedPath" -ForegroundColor Cyan
+    $buildOutput = az bicep build-params --file $resolvedPath --stdout 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($buildOutput)) {
+        throw "Failed to compile Bicep parameter file '$resolvedPath' (az bicep build-params). Run 'az bicep build-params --file $resolvedPath' directly to see the underlying error."
+    }
+
+    $compiledParametersJson = ($buildOutput | ConvertFrom-Json).parametersJson
+    $compiledParameters = ($compiledParametersJson | ConvertFrom-Json).parameters
+
+    function Get-CompiledParamValue {
+        param($Parameters, [string]$Name, [string]$Default = '')
+        if ($Parameters.PSObject.Properties.Name -contains $Name) {
+            return $Parameters.$Name.value
+        }
+        return $Default
+    }
+
+    $result = [pscustomobject]@{
+        ResolvedPath                    = $resolvedPath
+        ServiceTier                     = Get-CompiledParamValue -Parameters $compiledParameters -Name 'serviceTier'
+        ResourceGroupName               = Get-CompiledParamValue -Parameters $compiledParameters -Name 'resourceGroupName'
+        Location                        = Get-CompiledParamValue -Parameters $compiledParameters -Name 'location' -Default 'westeurope'
+        ClusterResourceId               = Get-CompiledParamValue -Parameters $compiledParameters -Name 'clusterResourceId'
+        LogAnalyticsWorkspaceResourceId = Get-CompiledParamValue -Parameters $compiledParameters -Name 'logAnalyticsWorkspaceResourceId'
+    }
+
+    if ($result.ServiceTier -notin @('Basic', 'Advanced', 'Premium')) {
+        throw "Bicep parameter file '$resolvedPath' has an invalid or missing 'serviceTier' value ('$($result.ServiceTier)') - must be Basic, Advanced, or Premium."
+    }
+    if ([string]::IsNullOrWhiteSpace($result.ResourceGroupName)) {
+        throw "Bicep parameter file '$resolvedPath' is missing a value for 'resourceGroupName'."
+    }
+    if ([string]::IsNullOrWhiteSpace($result.ClusterResourceId)) {
+        throw "Bicep parameter file '$resolvedPath' is missing a value for 'clusterResourceId'."
+    }
+
+    return $result
+}
 
 function Assert-JsonArray {
     <#
@@ -503,32 +591,50 @@ function Set-AzureLocalDcrEventCollection {
     }
 }
 
+$usingBicepParamFile = $PSCmdlet.ParameterSetName -eq 'ByBicepParamFile'
+
+if ($usingBicepParamFile) {
+    $bicepParamValues = Resolve-BicepParamFile -Path $BicepParamFile
+    # Populate the same local variables the rest of the script (LAW check, DCR discovery,
+    # deployment-stack naming/description) already relies on, regardless of parameter set.
+    $ServiceTier = $bicepParamValues.ServiceTier
+    $ResourceGroupName = $bicepParamValues.ResourceGroupName
+    $Location = $bicepParamValues.Location
+    $ClusterResourceId = $bicepParamValues.ClusterResourceId
+    $LogAnalyticsWorkspaceResourceId = $bicepParamValues.LogAnalyticsWorkspaceResourceId
+}
+
 Write-Host "==> Validating parameters for tier '$ServiceTier'..." -ForegroundColor Cyan
 
 if ($ServiceTier -in @('Advanced', 'Premium') -and [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceResourceId)) {
-    throw "ServiceTier '$ServiceTier' requires -LogAnalyticsWorkspaceResourceId (Advanced/Premium alerts include log-based alert rules)."
+    throw "ServiceTier '$ServiceTier' requires a Log Analytics workspace resource ID (Advanced/Premium alerts include log-based alert rules) - set -LogAnalyticsWorkspaceResourceId, or 'logAnalyticsWorkspaceResourceId' in the .bicepparam file."
 }
 
 if ($ActionOnUnmanage -eq 'deleteAll') {
     Write-Warning "ActionOnUnmanage 'deleteAll' will delete the resource group '$ResourceGroupName' (and everything in it, including the Azure Local cluster resource) if the stack is later deleted or the RG falls out of the template. 'deleteResources' is strongly recommended instead."
 }
 
-Assert-JsonArray -Value $EmailReceiversJson -ParamName 'EmailReceiversJson'
-Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
-Assert-JsonArray -Value $CriticalServiceNamesJson -ParamName 'CriticalServiceNamesJson'
+if (-not $usingBicepParamFile) {
+    # ByValue-only: the .bicepparam file itself already carries these values (in valid Bicep
+    # syntax, checked by `az bicep build-params` during Resolve-BicepParamFile above), so none of
+    # this re-validation applies when -BicepParamFile is used.
+    Assert-JsonArray -Value $EmailReceiversJson -ParamName 'EmailReceiversJson'
+    Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
+    Assert-JsonArray -Value $CriticalServiceNamesJson -ParamName 'CriticalServiceNamesJson'
 
-$emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
-$webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
-$criticalServiceNames = @($CriticalServiceNamesJson | ConvertFrom-Json)
-$suppressionWindows = @(Assert-SuppressionWindows -Json $SuppressionWindowsJson)
-Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
+    $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
+    $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
+    $criticalServiceNames = @($CriticalServiceNamesJson | ConvertFrom-Json)
+    $suppressionWindows = @(Assert-SuppressionWindows -Json $SuppressionWindowsJson)
+    Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
 
-if ($ServiceTier -eq 'Basic' -and -not [string]::IsNullOrWhiteSpace($LogAlertsMuteActionsDuration)) {
-    Write-Warning "LogAlertsMuteActionsDuration is set but ServiceTier is 'Basic' - Basic has no log-based alerts, so this setting has no effect."
-}
+    if ($ServiceTier -eq 'Basic' -and -not [string]::IsNullOrWhiteSpace($LogAlertsMuteActionsDuration)) {
+        Write-Warning "LogAlertsMuteActionsDuration is set but ServiceTier is 'Basic' - Basic has no log-based alerts, so this setting has no effect."
+    }
 
-if ($emailReceivers.Count -eq 0 -and $webhookReceivers.Count -eq 0) {
-    Write-Warning "No email or webhook receivers supplied. Alerts will fire with nobody notified."
+    if ($emailReceivers.Count -eq 0 -and $webhookReceivers.Count -eq 0) {
+        Write-Warning "No email or webhook receivers supplied. Alerts will fire with nobody notified."
+    }
 }
 
 Write-Host "==> Setting subscription context to $SubscriptionId..." -ForegroundColor Cyan
@@ -584,46 +690,57 @@ function ConvertTo-CompactJsonArray {
     return (ConvertTo-Json -InputObject $Items -Compress)
 }
 
-# Bicep params must be passed as a single JSON-escaped string for array-typed CLI parameters.
-$emailReceiversCompact = ConvertTo-CompactJsonArray -Items $emailReceivers
-$webhookReceiversCompact = ConvertTo-CompactJsonArray -Items $webhookReceivers
-$suppressionWindowsCompact = ConvertTo-CompactJsonArray -Items $suppressionWindows
-$criticalServiceNamesCompact = ConvertTo-CompactJsonArray -Items $criticalServiceNames
-$includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
-$enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
+if (-not $usingBicepParamFile) {
+    # Bicep params must be passed as a single JSON-escaped string for array-typed CLI parameters.
+    $emailReceiversCompact = ConvertTo-CompactJsonArray -Items $emailReceivers
+    $webhookReceiversCompact = ConvertTo-CompactJsonArray -Items $webhookReceivers
+    $suppressionWindowsCompact = ConvertTo-CompactJsonArray -Items $suppressionWindows
+    $criticalServiceNamesCompact = ConvertTo-CompactJsonArray -Items $criticalServiceNames
+    $includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
+    $enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
+}
 
 if ([string]::IsNullOrWhiteSpace($DeploymentStackName)) {
     $DeploymentStackName = "stack-azurelocal-alerts-$ResourceGroupName"
 }
 
-$templateParameters = @(
-    "serviceTier=$ServiceTier",
-    "resourceGroupName=$ResourceGroupName",
-    "location=$Location",
-    "clusterResourceId=$ClusterResourceId",
-    "logAnalyticsWorkspaceResourceId=$LogAnalyticsWorkspaceResourceId",
-    "actionGroupName=$ActionGroupName",
-    "actionGroupShortName=$ActionGroupShortName",
-    "emailReceivers=$emailReceiversCompact",
-    "webhookReceivers=$webhookReceiversCompact",
-    "cpuThresholdPercent=$CpuThresholdPercent",
-    "memoryThresholdPercent=$MemoryThresholdPercent",
-    "storageFreeBytesThreshold=$StorageFreeBytesThreshold",
-    "memoryAvailableBytesThreshold=$MemoryAvailableBytesThreshold",
-    "volumeLatencyReadThresholdSeconds=$VolumeLatencyReadThresholdSeconds",
-    "volumeLatencyWriteThresholdSeconds=$VolumeLatencyWriteThresholdSeconds",
-    "networkInThresholdBytesPerSecond=$NetworkInThresholdBytesPerSecond",
-    "networkOutThresholdBytesPerSecond=$NetworkOutThresholdBytesPerSecond",
-    "includeServiceHealth=$includeServiceHealthValue",
-    "suppressionWindows=$suppressionWindowsCompact",
-    "enableOffHoursSuppression=$enableOffHoursSuppressionValue",
-    "serviceHoursStart=$ServiceHoursStart",
-    "serviceHoursEnd=$ServiceHoursEnd",
-    "serviceHoursTimeZone=$ServiceHoursTimeZone",
-    "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
-    "criticalServiceNames=$criticalServiceNamesCompact",
-    "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
-)
+if ($usingBicepParamFile) {
+    # The .bicepparam file (using bicep/main.bicep) carries every template parameter already -
+    # pass it straight through as the single --parameters value instead of building individual
+    # key=value pairs. Its `using` statement means --template-file is omitted here (passing both
+    # would conflict).
+    $templateParameters = @($bicepParamValues.ResolvedPath)
+}
+else {
+    $templateParameters = @(
+        "serviceTier=$ServiceTier",
+        "resourceGroupName=$ResourceGroupName",
+        "location=$Location",
+        "clusterResourceId=$ClusterResourceId",
+        "logAnalyticsWorkspaceResourceId=$LogAnalyticsWorkspaceResourceId",
+        "actionGroupName=$ActionGroupName",
+        "actionGroupShortName=$ActionGroupShortName",
+        "emailReceivers=$emailReceiversCompact",
+        "webhookReceivers=$webhookReceiversCompact",
+        "cpuThresholdPercent=$CpuThresholdPercent",
+        "memoryThresholdPercent=$MemoryThresholdPercent",
+        "storageFreeBytesThreshold=$StorageFreeBytesThreshold",
+        "memoryAvailableBytesThreshold=$MemoryAvailableBytesThreshold",
+        "volumeLatencyReadThresholdSeconds=$VolumeLatencyReadThresholdSeconds",
+        "volumeLatencyWriteThresholdSeconds=$VolumeLatencyWriteThresholdSeconds",
+        "networkInThresholdBytesPerSecond=$NetworkInThresholdBytesPerSecond",
+        "networkOutThresholdBytesPerSecond=$NetworkOutThresholdBytesPerSecond",
+        "includeServiceHealth=$includeServiceHealthValue",
+        "suppressionWindows=$suppressionWindowsCompact",
+        "enableOffHoursSuppression=$enableOffHoursSuppressionValue",
+        "serviceHoursStart=$ServiceHoursStart",
+        "serviceHoursEnd=$ServiceHoursEnd",
+        "serviceHoursTimeZone=$ServiceHoursTimeZone",
+        "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
+        "criticalServiceNames=$criticalServiceNamesCompact",
+        "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
+    )
+}
 
 $stackAction = if ($WhatIf) { 'validate' } else { 'create' }
 
@@ -636,10 +753,12 @@ $stackAction = if ($WhatIf) { 'validate' } else { 'create' }
 $azArgs = @(
     'stack', 'sub', $stackAction,
     '--name', $DeploymentStackName,
-    '--location', $Location,
-    '--template-file', $templateFile,
-    '--parameters'
-) + $templateParameters + @(
+    '--location', $Location
+)
+if (-not $usingBicepParamFile) {
+    $azArgs += @('--template-file', $templateFile)
+}
+$azArgs += @('--parameters') + $templateParameters + @(
     '--deny-settings-mode', $DenySettingsMode,
     '--action-on-unmanage', $ActionOnUnmanage,
     '--description', "Azure Local alerts ($ServiceTier) for $ClusterResourceId"
