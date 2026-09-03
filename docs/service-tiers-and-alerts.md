@@ -284,6 +284,18 @@ Set `enableOffHoursSuppression: false` (or the `enableOffHoursSuppression` pipel
 `'false'`) to opt a specific Basic/Advanced cluster out of this behavior (e.g. if the customer
 wants 24/7 paging despite a Basic/Advanced contract).
 
+> **Scoping note (Advanced/Premium):** Alert Processing Rules only suppress alerts whose actual
+> *target resource* falls within the rule's `scopes`. Metric alerts target the
+> `Microsoft.AzureStackHCI/clusters` resource, so `clusterResourceId` alone covers them - but log
+> alerts (`Microsoft.Insights/scheduledQueryRules`) target the Log Analytics workspace instead (the
+> portal shows "Target resource type: microsoft.operationalinsights/workspaces" on these). This was
+> live-discovered as a real bug: log alerts showed "Suppression status: None" despite an active
+> schedule, because `scopes` only listed the cluster. Fixed by having `alerts.bicep` pass
+> `additionalScopes: [logAnalyticsWorkspaceResourceId]` into both this module and the
+> maintenance-window module below whenever the tier is Advanced/Premium - both now correctly cover
+> every log alert (heartbeat, volume health, general health fault, cluster quorum/isolation,
+> critical-service watchdog, Hyper-V availability) as well as the metric alerts.
+
 ### Maintenance-window suppression rules (all tiers)
 
 Every tier supports **multiple suppression rules** (`Microsoft.AlertsManagement/actionRules`,
