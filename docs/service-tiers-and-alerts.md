@@ -62,6 +62,30 @@ bicep/main.bicep                     (subscription scope, optional RG creation)
 One Action Group per cluster is reused by every alert rule for that cluster, and supports both
 **email** and **webhook** receivers (e.g. Freshservice ITSM webhook + an ops distribution list).
 
+The resource group named by the `resourceGroupName` parameter is always created/ensured as part
+of `main.bicep` (idempotent - safe against an already-existing RG); there is no separate toggle.
+
+### Deployment stacks - tracked resources, deny-delete protection
+
+Instead of a plain `az deployment sub create`, `scripts/Deploy-AzureLocalAlerts.ps1` deploys via
+[`az stack sub create`](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks)
+(Azure Deployment Stacks). This gives two guarantees:
+
+- **`--deny-settings-mode denyDelete`** (default): Azure Resource Manager denies delete operations
+  against any resource the stack manages (the resource group, Action Group, and every alert
+  rule), so they cannot be deleted from the portal or CLI outside the pipeline - a stronger
+  guarantee than "the pipeline will just redeploy over drift".
+- **`--action-on-unmanage deleteResources`** (default): resources that fall out of the template
+  (e.g. downgrading a cluster from Advanced to Basic removes its log alerts) are deleted
+  automatically on the next deployment, so there's no orphaned-resource cleanup to do by hand.
+  Resource **groups** are deliberately never auto-deleted by this setting, even if the stack
+  itself is later removed - only `deleteAll` would do that, and it is intentionally not the
+  default because the RG also contains the customer's live Azure Local cluster resource.
+
+One deployment stack is created per resource group, named `stack-azurelocal-alerts-<rg-name>` by
+default (override with `-DeploymentStackName`). Re-running the pipeline updates the existing
+stack in place.
+
 ### Config-as-code / drift prevention
 
 `pipeline/environments/<name>.yml` files commit, per cluster/tenant: the Azure DevOps service
@@ -69,7 +93,8 @@ connection (tenant), subscription/resource group, service tier, cluster/workspac
 and action group receivers. `pipeline/azure-pipelines.yml` triggers on every push to `main` that
 touches `bicep/**` or `pipeline/environments/**`. Because Bicep deployments are declarative, each
 run re-applies exactly what's committed - reverting any manual portal changes on the next run
-instead of letting configuration drift persist silently.
+instead of letting configuration drift persist silently. The deny-delete deployment stack setting
+above adds a second layer of protection on top of pipeline-driven redeployment.
 
 To onboard a new cluster:
 1. Copy an existing file in `pipeline/environments/` and fill in the tenant's values.

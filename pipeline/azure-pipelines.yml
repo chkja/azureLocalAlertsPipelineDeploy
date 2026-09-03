@@ -12,6 +12,11 @@
 #   state on the next run - Bicep deployments are idempotent/declarative, so re-applying the same
 #   template is safe.
 #
+#   Deployments are wrapped in an Azure Deployment Stack (deny mode: denyDelete, see
+#   scripts/Deploy-AzureLocalAlerts.ps1) so every resource created - including the resource
+#   group - is tracked as a single managed unit, and deletion of any managed resource outside
+#   the stack (e.g. an accidental portal delete) is denied by Azure Resource Manager.
+#
 # Selecting tenant + tier
 #   - For scheduled/CI runs: edit the relevant pipeline/environments/<name>.yml file and merge to
 #     main. The pipeline auto-deploys using the values committed there (service connection + tier
@@ -94,7 +99,7 @@ stages:
     displayName: 'Validate (what-if)'
     jobs:
       - job: WhatIf
-        displayName: 'az deployment sub what-if'
+        displayName: 'az stack sub validate'
         steps:
           - task: AzureCLI@2
             displayName: 'Run Deploy-AzureLocalAlerts.ps1 -WhatIf'
@@ -118,7 +123,8 @@ stages:
                   CpuThresholdPercent              = [int]'$(cpuThresholdPercent)'
                   MemoryThresholdPercent           = [int]'$(memoryThresholdPercent)'
                   HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
-                  CreateResourceGroup              = [bool]::Parse('$(createResourceGroup)')
+                  DenySettingsMode                 = 'denyDelete'
+                  ActionOnUnmanage                 = 'deleteResources'
                   WhatIf                           = $true
                 }
                 ./scripts/Deploy-AzureLocalAlerts.ps1 @deployArgs
@@ -158,6 +164,7 @@ stages:
                         CpuThresholdPercent              = [int]'$(cpuThresholdPercent)'
                         MemoryThresholdPercent           = [int]'$(memoryThresholdPercent)'
                         HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
-                        CreateResourceGroup              = [bool]::Parse('$(createResourceGroup)')
+                        DenySettingsMode                 = 'denyDelete'
+                        ActionOnUnmanage                 = 'deleteResources'
                       }
                       ./scripts/Deploy-AzureLocalAlerts.ps1 @deployArgs

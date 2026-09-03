@@ -1,10 +1,13 @@
-// Entry point deployed at subscription scope so the pipeline can optionally create the
-// resource group, then deploys the Action Group + tier-appropriate alert rules into it.
+// Entry point deployed at subscription scope. Always ensures the target resource group exists
+// (idempotent - safe to re-run against an existing RG), then deploys the Action Group +
+// tier-appropriate alert rules into it.
 //
-// Deploy with:
-//   az deployment sub create --location <region> --template-file bicep/main.bicep \
-//     --parameters bicep/parameters/<tier>.parameters.json
-// or via scripts/Deploy-AzureLocalAlerts.ps1 (recommended - includes validation).
+// This template is intended to be deployed as an Azure Deployment Stack (not a plain
+// `az deployment sub create`) so that every resource it creates is tracked, and accidental
+// deletion outside the stack is denied. See scripts/Deploy-AzureLocalAlerts.ps1, which wraps:
+//   az stack sub create --name <stackName> --location <region> --template-file bicep/main.bicep \
+//     --parameters bicep/parameters/<tier>.parameters.json \
+//     --deny-settings-mode denyDelete --action-on-unmanage deleteResources
 
 targetScope = 'subscription'
 
@@ -16,14 +19,11 @@ targetScope = 'subscription'
 @description('Managed service tier for this Azure Local cluster. Basic = metric alerts only. Advanced/Premium = metric + log alerts.')
 param serviceTier string
 
-@description('Resource group that contains (or will contain) the Action Group and alert rules. Typically the same RG as the Azure Local cluster resource.')
+@description('Name of the resource group that will contain the Action Group and alert rules. Typically the same RG as the Azure Local cluster resource. Created if it does not already exist.')
 param resourceGroupName string
 
-@description('Azure region for the resource group (if created) and alert rule metadata.')
+@description('Azure region for the resource group and alert rule metadata.')
 param location string = 'westeurope'
-
-@description('Create the resource group as part of this deployment. Set to false if the RG already exists.')
-param createResourceGroup bool = false
 
 @description('ARM resource ID of the Microsoft.AzureStackHCI/clusters resource being monitored.')
 param clusterResourceId string
@@ -68,7 +68,7 @@ param severityCapacity int = 2
 @description('Severity for the Premium-only enhanced monitoring alert.')
 param severityPremium int = 2
 
-resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = if (createResourceGroup) {
+resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
 }
@@ -94,8 +94,11 @@ module alerts 'modules/alerts.bicep' = {
     severityCapacity: severityCapacity
     severityPremium: severityPremium
   }
-  dependsOn: createResourceGroup ? [rg] : []
+  dependsOn: [
+    rg
+  ]
 }
 
 output actionGroupId string = alerts.outputs.actionGroupId
 output deployedTier string = alerts.outputs.deployedTier
+

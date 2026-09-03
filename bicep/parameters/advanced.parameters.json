@@ -2,31 +2,68 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "serviceTier": { "value": "Advanced" },
-    "resourceGroupName": { "value": "rg-azurelocal-customera-prod" },
-    "location": { "value": "westeurope" },
-    "createResourceGroup": { "value": false },
-    "clusterResourceId": { "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomera" },
-    "logAnalyticsWorkspaceResourceId": { "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.OperationalInsights/workspaces/law-azurelocal-customera" },
-    "actionGroupName": { "value": "ag-azurelocal-customera-prod" },
-    "actionGroupShortName": { "value": "azlalerts" },
+    "serviceTier": {
+      "value": "Advanced"
+    },
+    "resourceGroupName": {
+      "value": "rg-azurelocal-customera-prod"
+    },
+    "location": {
+      "value": "westeurope"
+    },
+    "clusterResourceId": {
+      "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomera"
+    },
+    "logAnalyticsWorkspaceResourceId": {
+      "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.OperationalInsights/workspaces/law-azurelocal-customera"
+    },
+    "actionGroupName": {
+      "value": "ag-azurelocal-customera-prod"
+    },
+    "actionGroupShortName": {
+      "value": "azlalerts"
+    },
     "emailReceivers": {
       "value": [
-        { "name": "fmp-ops", "emailAddress": "azurelocal-ops@example.com", "useCommonAlertSchema": true }
+        {
+          "name": "fmp-ops",
+          "emailAddress": "azurelocal-ops@example.com",
+          "useCommonAlertSchema": true
+        }
       ]
     },
     "webhookReceivers": {
       "value": [
-        { "name": "fmp-itsm-webhook", "serviceUri": "https://example.freshservice.com/api/v2/webhook/azurelocal-alerts", "useCommonAlertSchema": true }
+        {
+          "name": "fmp-itsm-webhook",
+          "serviceUri": "https://example.freshservice.com/api/v2/webhook/azurelocal-alerts",
+          "useCommonAlertSchema": true
+        }
       ]
     },
-    "cpuThresholdPercent": { "value": 85 },
-    "memoryThresholdPercent": { "value": 85 },
-    "heartbeatMissingMinutes": { "value": 10 },
-    "evaluationFrequency": { "value": "PT5M" },
-    "windowSize": { "value": "PT15M" },
-    "severityHealth": { "value": 1 },
-    "severityCapacity": { "value": 2 },
-    "severityPremium": { "value": 2 }
+    "cpuThresholdPercent": {
+      "value": 85
+    },
+    "memoryThresholdPercent": {
+      "value": 85
+    },
+    "heartbeatMissingMinutes": {
+      "value": 10
+    },
+    "evaluationFrequency": {
+      "value": "PT5M"
+    },
+    "windowSize": {
+      "value": "PT15M"
+    },
+    "severityHealth": {
+      "value": 1
+    },
+    "severityCapacity": {
+      "value": 2
+    },
+    "severityPremium": {
+      "value": 2
+    }
   }
 }

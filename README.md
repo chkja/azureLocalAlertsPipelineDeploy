@@ -29,7 +29,8 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
      -ClusterResourceId "/subscriptions/.../providers/Microsoft.AzureStackHCI/clusters/<name>" `
      -LogAnalyticsWorkspaceId "<workspace-guid>"   # omit for Basic tier
    ```
-2. **Deploy locally** for a quick test:
+2. **Deploy locally** for a quick test (creates/updates an Azure Deployment Stack with
+   `--deny-settings-mode denyDelete`, so managed resources can't be deleted outside the stack):
    ```powershell
    az login
    pwsh -File scripts/Deploy-AzureLocalAlerts.ps1 `
@@ -43,8 +44,9 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
      -ActionGroupShortName "azlalerts" `
      -EmailReceiversJson '[{"name":"ops","emailAddress":"ops@example.com"}]' `
      -WebhookReceiversJson '[{"name":"itsm","serviceUri":"https://example.com/webhook"}]' `
-     -WhatIf   # drop this switch to actually deploy
+     -WhatIf   # drop this switch to actually deploy (runs `az stack sub validate` vs `create`)
    ```
+   The resource group is always created/ensured as part of this deployment (no separate toggle).
 3. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.yml`, fill in your
    values, add the file name to the `environmentFile` parameter list in
    `pipeline/azure-pipelines.yml`, and merge to `main`.
@@ -53,6 +55,11 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 
 - Azure DevOps ARM service connection per tenant/subscription (name referenced by
   `serviceConnection` in each environment file).
-- Azure CLI + Bicep (bundled on Microsoft-hosted `ubuntu-latest` agents).
+- Azure CLI >= 2.61 (for the built-in `az stack` command) + Bicep (bundled on Microsoft-hosted
+  `ubuntu-latest` agents). Older CLI versions get the `deployment-stacks` extension installed
+  automatically by `Deploy-AzureLocalAlerts.ps1`.
+- The service connection's principal needs `Contributor` (or equivalent) at the subscription (or
+  target resource group) scope - deployment stacks with `denyDelete` still require write access
+  to create/update the stack and its managed resources.
 - For Advanced/Premium: Log Analytics workspace + DCR/DCE already collecting Azure Local Insights
   data (see [Azure Local - Insights and Logging - Part 1](https://chkja.dk/blog/azure-local-insights-part1)).
