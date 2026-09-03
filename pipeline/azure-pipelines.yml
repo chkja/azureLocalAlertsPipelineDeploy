@@ -2,15 +2,17 @@
 #
 # Purpose
 #   Deploys the Action Group + tier-appropriate metric/log alert rules (bicep/) for one Azure
-#   Local cluster, using the config committed in pipeline/environments/<environmentFile>.yml.
+#   Local cluster, using the config committed in pipeline/environments/<environmentFile>.yml plus
+#   the companion pipeline/environments/<environmentFile>.bicepparam file it points to.
 #
 # Config-as-code / drift prevention
-#   Each environment file pins: service connection (tenant), subscription, resource group,
-#   service tier, cluster/workspace resource IDs, and action group receivers. Because this
-#   pipeline is triggered on every push to main that touches bicep/** or pipeline/environments/**,
-#   any manual change made in the Azure portal (drift) is silently reverted back to the committed
-#   state on the next run - Bicep deployments are idempotent/declarative, so re-applying the same
-#   template is safe.
+#   The .yml file pins non-template metadata (service connection/tenant, subscription ID, DCR
+#   resource ID for the pre-flight check). The .bicepparam file pins every actual Bicep template
+#   parameter: service tier, resource group, cluster/workspace resource IDs, thresholds, and
+#   action group receivers. Because this pipeline is triggered on every push to main that touches
+#   bicep/** or pipeline/environments/**, any manual change made in the Azure portal (drift) is
+#   silently reverted back to the committed state on the next run - Bicep deployments are
+#   idempotent/declarative, so re-applying the same template is safe.
 #
 #   Deployments are wrapped in an Azure Deployment Stack (deny mode: denyDelete, see
 #   scripts/Deploy-AzureLocalAlerts.ps1) so every resource created - including the resource
@@ -18,12 +20,15 @@
 #   the stack (e.g. an accidental portal delete) is denied by Azure Resource Manager.
 #
 # Selecting tenant + tier
-#   - For scheduled/CI runs: edit the relevant pipeline/environments/<name>.yml file and merge to
-#     main. The pipeline auto-deploys using the values committed there (service connection + tier
-#     included) - no manual pipeline configuration needed.
+#   - For scheduled/CI runs: edit the relevant pipeline/environments/<name>.bicepparam file (tier,
+#     thresholds, receivers, etc.) and/or its companion .yml file (service connection), then merge
+#     to main. The pipeline auto-deploys using the values committed there - no manual pipeline
+#     configuration needed.
 #   - For manual/ad-hoc runs: use "Run pipeline" and pick `environmentFile` from the dropdown.
-#     `serviceConnectionOverride` and `serviceTierOverride` let you deploy a different tenant or
-#     tier once without editing the committed file (useful for testing).
+#     `serviceConnectionOverride` lets you deploy to a different tenant once without editing the
+#     committed file (useful for testing). There is no service-tier override - since the tier is
+#     a typed Bicep parameter inside the .bicepparam file, override it there (or with a one-off
+#     local `pwsh -File ./scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile ...` run) instead.
 #
 # Prerequisites
 #   - One Azure DevOps ARM service connection per tenant/subscription (name must match the
@@ -52,22 +57,12 @@ parameters:
       - example-customera-basic
       - example-customerb-advanced
       - example-customerc-premium
-      # Add your own tenant here after creating pipeline/environments/<name>.yml
+      # Add your own tenant here after creating pipeline/environments/<name>.yml + .bicepparam
 
   - name: serviceConnectionOverride
     displayName: 'Override service connection (leave empty to use the value committed in the environment file)'
     type: string
     default: ''
-
-  - name: serviceTierOverride
-    displayName: 'Override service tier (leave empty to use the value committed in the environment file)'
-    type: string
-    default: ''
-    values:
-      - ''
-      - Basic
-      - Advanced
-      - Premium
 
   - name: whatIfOnly
     displayName: 'Validate only (what-if), do not apply changes'
@@ -76,20 +71,14 @@ parameters:
 
 variables:
   - template: environments/${{ parameters.environmentFile }}.yml
-  # effectiveServiceConnection / effectiveServiceTier resolve to the override parameter when
-  # supplied at queue time, otherwise fall back to the value committed in the environment file.
+  # effectiveServiceConnection resolves to the override parameter when supplied at queue time,
+  # otherwise falls back to the value committed in the environment file.
   - ${{ if ne(parameters.serviceConnectionOverride, '') }}:
       - name: effectiveServiceConnection
         value: ${{ parameters.serviceConnectionOverride }}
   - ${{ if eq(parameters.serviceConnectionOverride, '') }}:
       - name: effectiveServiceConnection
         value: $(serviceConnection)
-  - ${{ if ne(parameters.serviceTierOverride, '') }}:
-      - name: effectiveServiceTier
-        value: ${{ parameters.serviceTierOverride }}
-  - ${{ if eq(parameters.serviceTierOverride, '') }}:
-      - name: effectiveServiceTier
-        value: $(serviceTier)
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -109,40 +98,13 @@ stages:
               scriptLocation: 'inlineScript'
               inlineScript: |
                 $ErrorActionPreference = 'Stop'
-                $deployArgs = @{
-                  SubscriptionId                  = '$(subscriptionId)'
-                  ServiceTier                      = '$(effectiveServiceTier)'
-                  ResourceGroupName                = '$(resourceGroupName)'
-                  Location                         = '$(location)'
-                  ClusterResourceId                = '$(clusterResourceId)'
-                  LogAnalyticsWorkspaceResourceId  = '$(logAnalyticsWorkspaceResourceId)'
-                  ActionGroupName                  = '$(actionGroupName)'
-                  ActionGroupShortName             = '$(actionGroupShortName)'
-                  EmailReceiversJson               = '$(emailReceiversJson)'
-                  WebhookReceiversJson             = '$(webhookReceiversJson)'
-                  CpuThresholdPercent              = [int]'$(cpuThresholdPercent)'
-                  MemoryThresholdPercent           = [int]'$(memoryThresholdPercent)'
-                  StorageFreeBytesThreshold        = [int64]'$(storageFreeBytesThreshold)'
-                  MemoryAvailableBytesThreshold    = [int64]'$(memoryAvailableBytesThreshold)'
-                  VolumeLatencyReadThresholdSeconds  = '$(volumeLatencyReadThresholdSeconds)'
-                  VolumeLatencyWriteThresholdSeconds = '$(volumeLatencyWriteThresholdSeconds)'
-                  NetworkInThresholdBytesPerSecond  = [int64]'$(networkInThresholdBytesPerSecond)'
-                  NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
-                  IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
-                  SuppressionWindowsJson            = '$(suppressionWindowsJson)'
-                  EnableOffHoursSuppression        = [bool]::Parse('$(enableOffHoursSuppression)')
-                  ServiceHoursStart                = '$(serviceHoursStart)'
-                  ServiceHoursEnd                  = '$(serviceHoursEnd)'
-                  ServiceHoursTimeZone              = '$(serviceHoursTimeZone)'
-                  LogAlertsMuteActionsDuration      = '$(logAlertsMuteActionsDuration)'
-                  CriticalServiceNamesJson          = '$(criticalServiceNamesJson)'
-                  DcrResourceId                    = '$(dcrResourceId)'
-                  HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
-                  DenySettingsMode                 = 'denyDelete'
-                  ActionOnUnmanage                 = 'deleteResources'
-                  WhatIf                           = $true
-                }
-                ./scripts/Deploy-AzureLocalAlerts.ps1 @deployArgs
+                ./scripts/Deploy-AzureLocalAlerts.ps1 `
+                  -SubscriptionId '$(subscriptionId)' `
+                  -BicepParamFile '$(bicepParamFile)' `
+                  -DcrResourceId '$(dcrResourceId)' `
+                  -DenySettingsMode 'denyDelete' `
+                  -ActionOnUnmanage 'deleteResources' `
+                  -WhatIf
 
   - stage: Deploy
     displayName: 'Deploy'
@@ -165,36 +127,10 @@ stages:
                     scriptLocation: 'inlineScript'
                     inlineScript: |
                       $ErrorActionPreference = 'Stop'
-                      $deployArgs = @{
-                        SubscriptionId                  = '$(subscriptionId)'
-                        ServiceTier                      = '$(effectiveServiceTier)'
-                        ResourceGroupName                = '$(resourceGroupName)'
-                        Location                         = '$(location)'
-                        ClusterResourceId                = '$(clusterResourceId)'
-                        LogAnalyticsWorkspaceResourceId  = '$(logAnalyticsWorkspaceResourceId)'
-                        ActionGroupName                  = '$(actionGroupName)'
-                        ActionGroupShortName             = '$(actionGroupShortName)'
-                        EmailReceiversJson               = '$(emailReceiversJson)'
-                        WebhookReceiversJson             = '$(webhookReceiversJson)'
-                        CpuThresholdPercent              = [int]'$(cpuThresholdPercent)'
-                        MemoryThresholdPercent           = [int]'$(memoryThresholdPercent)'
-                        StorageFreeBytesThreshold        = [int64]'$(storageFreeBytesThreshold)'
-                        MemoryAvailableBytesThreshold    = [int64]'$(memoryAvailableBytesThreshold)'
-                        VolumeLatencyReadThresholdSeconds  = '$(volumeLatencyReadThresholdSeconds)'
-                        VolumeLatencyWriteThresholdSeconds = '$(volumeLatencyWriteThresholdSeconds)'
-                        NetworkInThresholdBytesPerSecond  = [int64]'$(networkInThresholdBytesPerSecond)'
-                        NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
-                        IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
-                        SuppressionWindowsJson            = '$(suppressionWindowsJson)'
-                        EnableOffHoursSuppression        = [bool]::Parse('$(enableOffHoursSuppression)')
-                        ServiceHoursStart                = '$(serviceHoursStart)'
-                        ServiceHoursEnd                  = '$(serviceHoursEnd)'
-                        ServiceHoursTimeZone              = '$(serviceHoursTimeZone)'
-                        LogAlertsMuteActionsDuration      = '$(logAlertsMuteActionsDuration)'
-                        CriticalServiceNamesJson          = '$(criticalServiceNamesJson)'
-                        DcrResourceId                    = '$(dcrResourceId)'
-                        HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
-                        DenySettingsMode                 = 'denyDelete'
-                        ActionOnUnmanage                 = 'deleteResources'
-                      }
-                      ./scripts/Deploy-AzureLocalAlerts.ps1 @deployArgs
+                      ./scripts/Deploy-AzureLocalAlerts.ps1 `
+                        -SubscriptionId '$(subscriptionId)' `
+                        -BicepParamFile '$(bicepParamFile)' `
+                        -DcrResourceId '$(dcrResourceId)' `
+                        -DenySettingsMode 'denyDelete' `
+                        -ActionOnUnmanage 'deleteResources'
+
