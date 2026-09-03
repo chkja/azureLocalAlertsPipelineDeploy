@@ -75,7 +75,6 @@ resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -114,7 +113,6 @@ resource cpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapa
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -150,7 +148,6 @@ resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeC
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -192,7 +189,6 @@ resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if 
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -244,7 +240,6 @@ resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' 
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -280,7 +275,6 @@ resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = i
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -316,7 +310,6 @@ resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = 
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -352,7 +345,6 @@ resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (inclu
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -388,7 +380,6 @@ resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (incl
     ]
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
-    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
     autoMitigate: autoMitigate
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'

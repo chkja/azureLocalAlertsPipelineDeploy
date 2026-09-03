@@ -121,7 +121,12 @@ module metricAlerts 'metricAlerts.bicep' = {
   name: 'deploy-metric-alerts'
   params: {
     clusterResourceId: clusterResourceId
-    location: location
+    // Deliberately NOT passing `location` here - metricAlerts.bicep defaults it to 'global',
+    // which is required for single-resource ("resource-level") static-threshold metric alerts.
+    // Passing the deployment's actual Azure region instead causes ARM to classify these as
+    // "Regional" (multi-resource) alert rules, which only support custom metrics and fail with
+    // "A Regional alert rule can only be created on a custom metric" for platform metrics like
+    // Microsoft.AzureStackHCI/clusters - confirmed via a live failed deployment.
     actionGroupId: actionGroup.outputs.actionGroupId
     // CPU / memory / volume-capacity metric alerts are pure metric alerts (no Log Analytics
     // dependency), so per the service description ("Basic level is only using metric alert")
