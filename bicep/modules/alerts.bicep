@@ -33,6 +33,11 @@ param webhookReceivers array = []
 param cpuThresholdPercent int = 85
 param memoryThresholdPercent int = 85
 param storageFreeBytesThreshold int = 214748364800
+param memoryAvailableBytesThreshold int = 1073741824
+param volumeLatencyReadThresholdSeconds string = '0.5'
+param volumeLatencyWriteThresholdSeconds string = '0.5'
+param networkInThresholdBytesPerSecond int = 500000000000
+param networkOutThresholdBytesPerSecond int = 200000000000
 param heartbeatMissingMinutes int = 10
 param evaluationFrequency string = 'PT5M'
 param windowSize string = 'PT15M'
@@ -72,6 +77,11 @@ module metricAlerts 'metricAlerts.bicep' = {
     cpuThresholdPercent: cpuThresholdPercent
     memoryThresholdPercent: memoryThresholdPercent
     storageFreeBytesThreshold: storageFreeBytesThreshold
+    memoryAvailableBytesThreshold: memoryAvailableBytesThreshold
+    volumeLatencyReadThresholdSeconds: volumeLatencyReadThresholdSeconds
+    volumeLatencyWriteThresholdSeconds: volumeLatencyWriteThresholdSeconds
+    networkInThresholdBytesPerSecond: networkInThresholdBytesPerSecond
+    networkOutThresholdBytesPerSecond: networkOutThresholdBytesPerSecond
   }
 }
 

@@ -127,6 +127,21 @@ param(
     [long]$StorageFreeBytesThreshold = 214748364800,
 
     [Parameter(Mandatory = $false)]
+    [long]$MemoryAvailableBytesThreshold = 1073741824,
+
+    [Parameter(Mandatory = $false)]
+    [string]$VolumeLatencyReadThresholdSeconds = '0.5',
+
+    [Parameter(Mandatory = $false)]
+    [string]$VolumeLatencyWriteThresholdSeconds = '0.5',
+
+    [Parameter(Mandatory = $false)]
+    [long]$NetworkInThresholdBytesPerSecond = 500000000000,
+
+    [Parameter(Mandatory = $false)]
+    [long]$NetworkOutThresholdBytesPerSecond = 200000000000,
+
+    [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
 
     [Parameter(Mandatory = $false)]
@@ -215,6 +230,11 @@ $templateParameters = @(
     "cpuThresholdPercent=$CpuThresholdPercent",
     "memoryThresholdPercent=$MemoryThresholdPercent",
     "storageFreeBytesThreshold=$StorageFreeBytesThreshold",
+    "memoryAvailableBytesThreshold=$MemoryAvailableBytesThreshold",
+    "volumeLatencyReadThresholdSeconds=$VolumeLatencyReadThresholdSeconds",
+    "volumeLatencyWriteThresholdSeconds=$VolumeLatencyWriteThresholdSeconds",
+    "networkInThresholdBytesPerSecond=$NetworkInThresholdBytesPerSecond",
+    "networkOutThresholdBytesPerSecond=$NetworkOutThresholdBytesPerSecond",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 

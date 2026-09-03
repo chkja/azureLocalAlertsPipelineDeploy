@@ -37,6 +37,21 @@ param memoryThresholdPercent int = 85
 @description('Available volume space (bytes) below which a storage-capacity alert fires. Confirmed on a live cluster via the "Volume Size Available" platform metric (REST name "volume size available"). This is an absolute-bytes threshold, not a percentage - Azure Monitor metric alerts cannot compute a ratio between two metrics (Available/Total), so tune this per environment using the actual "Volume Size Total" values for your volumes (see scripts/Get-AzureLocalAlertExploration.ps1, section 1/2). Default: 200 GiB.')
 param storageFreeBytesThreshold int = 214748364800
 
+@description('Available memory (bytes) below which an alert fires. This is the Microsoft-recommended "Available Memory Bytes" alert (metric "Memory\\Available Bytes"), distinct from the percentage-based memoryThresholdPercent alert above - both are deployed. Microsoft\'s documented default is "less than 1 GB"; default here is 1 GiB (1073741824).')
+param memoryAvailableBytesThreshold int = 1073741824
+
+@description('Volume read latency (seconds, as a numeric string so a sub-1 value can be expressed - Bicep int params cannot hold decimals) above which an alert fires. Metric "Cluster CSVFS\\Avg. sec/Read" is reported in seconds; Microsoft\'s documented recommended default is "greater than 500 ms" = 0.5 seconds.')
+param volumeLatencyReadThresholdSeconds string = '0.5'
+
+@description('Volume write latency (seconds, numeric string) above which an alert fires. Metric "Cluster CSVFS\\Avg. sec/Write"; Microsoft\'s documented recommended default is "greater than 500 ms" = 0.5 seconds.')
+param volumeLatencyWriteThresholdSeconds string = '0.5'
+
+@description('Inbound network throughput (bytes/sec) above which an alert fires. Metric "Network Adapter\\Bytes Received/sec"; Microsoft\'s documented recommended default is "greater than 500 GB/s" = 500,000,000,000 bytes/sec. Note this default is very high for most clusters - tune per environment/NIC speed.')
+param networkInThresholdBytesPerSecond int = 500000000000
+
+@description('Outbound network throughput (bytes/sec) above which an alert fires. Metric "Network Adapter\\Bytes Sent/sec"; Microsoft\'s documented recommended default is "greater than 200 GB/s" = 200,000,000,000 bytes/sec. Note this default is very high for most clusters - tune per environment/NIC speed.')
+param networkOutThresholdBytesPerSecond int = 200000000000
+
 @description('Whether alerts auto-resolve when the condition clears.')
 param autoMitigate bool = true
 
@@ -207,7 +222,199 @@ resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if 
   }
 }
 
+// ---------------------------------------------------------------------------
+// Advanced + Premium only: Microsoft's officially documented "recommended alert rules"
+// for Azure Local (see https://learn.microsoft.com/azure/azure-local/manage/set-up-recommended-alert-rules).
+// These 4 alerts (available-memory-bytes, volume-latency read/write, network in/out) round out
+// the full recommended set alongside the existing Percentage CPU alert above. Evaluated as
+// cluster-wide aggregates (no dimension splitting), matching Microsoft's out-of-the-box defaults.
+// ---------------------------------------------------------------------------
+resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-memory-available-bytes-low'
+  location: location
+  properties: {
+    description: 'Fires when available memory drops below ${memoryAvailableBytesThreshold} bytes for the evaluation window. Microsoft-recommended alert (metric "Memory\\Available Bytes"), complementary to the percentage-based memory alert.'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'LowAvailableMemoryBytes'
+          metricName: 'Memory\\Available Bytes'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'LessThan'
+          threshold: memoryAvailableBytesThreshold
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
+resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-volume-latency-read-high'
+  location: location
+  properties: {
+    description: 'Fires when average volume read latency exceeds ${volumeLatencyReadThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Read"; documented default: 500 ms).'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'HighVolumeLatencyRead'
+          metricName: 'Cluster CSVFS\\Avg. sec/Read'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'GreaterThan'
+          threshold: json(volumeLatencyReadThresholdSeconds)
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
+resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-volume-latency-write-high'
+  location: location
+  properties: {
+    description: 'Fires when average volume write latency exceeds ${volumeLatencyWriteThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Write"; documented default: 500 ms).'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'HighVolumeLatencyWrite'
+          metricName: 'Cluster CSVFS\\Avg. sec/Write'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'GreaterThan'
+          threshold: json(volumeLatencyWriteThresholdSeconds)
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
+resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-network-in-high'
+  location: location
+  properties: {
+    description: 'Fires when inbound network throughput exceeds ${networkInThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Received/sec"; documented default: 500 GB/s).'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'HighNetworkIn'
+          metricName: 'Network Adapter\\Bytes Received/sec'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'GreaterThan'
+          threshold: networkInThresholdBytesPerSecond
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
+resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-network-out-high'
+  location: location
+  properties: {
+    description: 'Fires when outbound network throughput exceeds ${networkOutThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Sent/sec"; documented default: 200 GB/s).'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'HighNetworkOut'
+          metricName: 'Network Adapter\\Bytes Sent/sec'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'GreaterThan'
+          threshold: networkOutThresholdBytesPerSecond
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
 output storageDegradedAlertId string = storageDegradedAlert.id
 output cpuAlertId string = includeCapacityMetrics ? cpuAlert.id : ''
 output memoryAlertId string = includeCapacityMetrics ? memoryAlert.id : ''
 output storageCapacityAlertId string = includeCapacityMetrics ? storageCapacityAlert.id : ''
+output memoryAvailableBytesAlertId string = includeCapacityMetrics ? memoryAvailableBytesAlert.id : ''
+output volumeLatencyReadAlertId string = includeCapacityMetrics ? volumeLatencyReadAlert.id : ''
+output volumeLatencyWriteAlertId string = includeCapacityMetrics ? volumeLatencyWriteAlert.id : ''
+output networkInAlertId string = includeCapacityMetrics ? networkInAlert.id : ''
+output networkOutAlertId string = includeCapacityMetrics ? networkOutAlert.id : ''

@@ -28,8 +28,13 @@ volume health events, and (Premium) proactive anomaly detection.
 | Alert | Type | Basic | Advanced | Premium | Source |
 |---|---|:---:|:---:|:---:|---|
 | Storage degraded (failed/missing drives) | Metric | ✅ | ✅ | ✅ | `Microsoft.AzureStackHCI/clusters` metric `Cluster Node Storage Degraded` |
-| CPU usage high | Metric | ❌ | ✅ | ✅ | metric `Hyper-V Hypervisor Logical Processor\% Total Run Time` |
-| Memory usage high | Metric | ❌ | ✅ | ✅ | metric `ClusterNode Memory Usage` |
+| CPU usage high | Metric | ❌ | ✅ | ✅ | metric `Hyper-V Hypervisor Logical Processor\% Total Run Time` (MS-recommended: >80%; default here: 85%) |
+| Memory usage high (%) | Metric | ❌ | ✅ | ✅ | metric `ClusterNode Memory Usage` |
+| Available memory low (bytes) | Metric | ❌ | ✅ | ✅ | metric `Memory\Available Bytes` - MS-recommended alert, < 1 GiB |
+| Volume read latency high | Metric | ❌ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Read` - MS-recommended alert, > 500 ms |
+| Volume write latency high | Metric | ❌ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Write` - MS-recommended alert, > 500 ms |
+| Network inbound throughput high | Metric | ❌ | ✅ | ✅ | metric `Network Adapter\Bytes Received/sec` - MS-recommended alert, > 500 GB/s |
+| Network outbound throughput high | Metric | ❌ | ✅ | ✅ | metric `Network Adapter\Bytes Sent/sec` - MS-recommended alert, > 200 GB/s |
 | Storage capacity low (per volume) | Metric | ❌ | ✅ | ✅ | metric `Volume Size Available` (dimension-split by `LUN`), absolute bytes threshold |
 | Node heartbeat missing (unreachable node) | Log | ❌ | ✅ | ✅ | `Heartbeat` table, KQL |
 | Volume health degraded | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational` + `Microsoft-Windows-SDDC-Management/Operational`), KQL |
@@ -59,6 +64,18 @@ This directly maps to the service description:
 > percentage alert was not viable; the metric-based absolute-bytes alert was used instead because
 > `Volume Size Available` / `Volume Size Total` / `Physicaldisk Capacity Size Total`/`Used` are
 > confirmed, documented platform metrics available even without Log Analytics.
+
+> **Advanced/Premium include all 6 of Microsoft's officially documented "recommended alert rules"
+> for Azure Local** (see [Enable recommended alert rules for Azure Local](https://learn.microsoft.com/azure/azure-local/manage/set-up-recommended-alert-rules)):
+> Percentage CPU, Available Memory Bytes, Volume Latency Read, Volume Latency Write, Network In
+> Per Second, and Network Out Per Second - plus this repo's own additions (storage-degraded
+> health, percentage-based memory, per-volume storage capacity). All 6 metric names/units were
+> confirmed live against the tested cluster's metric definitions
+> (`az monitor metrics list-definitions`). Defaults match Microsoft's documented suggested
+> thresholds (CPU >80%, memory <1 GiB, volume latency >500 ms read/write, network in >500 GB/s,
+> network out >200 GB/s) and are fully tunable per environment via the corresponding Bicep
+> parameters/pipeline variables. Note Microsoft's 500/200 GB/s network defaults are extremely
+> high for most NIC speeds - review and lower them per environment.
 
 ## 3. Deployment model
 
@@ -191,11 +208,16 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | Parameter | Default | Notes |
 |---|---|---|
 | `severityHealth` | 1 (Error) | Storage degraded, node heartbeat, volume health |
-| `severityCapacity` | 2 (Warning) | CPU / Memory / storage capacity |
+| `severityCapacity` | 2 (Warning) | CPU / Memory / storage capacity / latency / network |
 | `severityPremium` | 2 (Warning) | Error-event rate |
-| `cpuThresholdPercent` | 85 | Tune per cluster workload profile |
+| `cpuThresholdPercent` | 85 | Tune per cluster workload profile (MS recommends 80) |
 | `memoryThresholdPercent` | 85 | Tune per cluster workload profile |
 | `storageFreeBytesThreshold` | 214748364800 (200 GiB) | Absolute bytes, per volume (dimension `LUN`) - tune against `Volume Size Total` |
+| `memoryAvailableBytesThreshold` | 1073741824 (1 GiB) | MS-recommended "Available Memory Bytes" alert |
+| `volumeLatencyReadThresholdSeconds` | `'0.5'` (500 ms) | MS-recommended default; numeric string (seconds) |
+| `volumeLatencyWriteThresholdSeconds` | `'0.5'` (500 ms) | MS-recommended default; numeric string (seconds) |
+| `networkInThresholdBytesPerSecond` | 500000000000 (500 GB/s) | MS-recommended default - very high, review per NIC speed |
+| `networkOutThresholdBytesPerSecond` | 200000000000 (200 GB/s) | MS-recommended default - very high, review per NIC speed |
 | `heartbeatMissingMinutes` | 10 | Node considered unreachable |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 

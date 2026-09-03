@@ -53,6 +53,21 @@ param memoryThresholdPercent int = 85
 @description('Available volume space (bytes) below which a storage-capacity alert fires (Advanced/Premium only). Absolute bytes, not percent - tune per environment. Default: 200 GiB.')
 param storageFreeBytesThreshold int = 214748364800
 
+@description('Available memory (bytes) below which the Microsoft-recommended "Available Memory Bytes" alert fires (Advanced/Premium only). Default: 1 GiB.')
+param memoryAvailableBytesThreshold int = 1073741824
+
+@description('Volume read latency threshold, in seconds as a numeric string (Advanced/Premium only). Microsoft-recommended default: 500 ms = "0.5".')
+param volumeLatencyReadThresholdSeconds string = '0.5'
+
+@description('Volume write latency threshold, in seconds as a numeric string (Advanced/Premium only). Microsoft-recommended default: 500 ms = "0.5".')
+param volumeLatencyWriteThresholdSeconds string = '0.5'
+
+@description('Inbound network throughput threshold, bytes/sec (Advanced/Premium only). Microsoft-recommended default: 500 GB/s.')
+param networkInThresholdBytesPerSecond int = 500000000000
+
+@description('Outbound network throughput threshold, bytes/sec (Advanced/Premium only). Microsoft-recommended default: 200 GB/s.')
+param networkOutThresholdBytesPerSecond int = 200000000000
+
 @description('Minutes without a Heartbeat before a node is considered unreachable (Advanced/Premium only).')
 param heartbeatMissingMinutes int = 10
 
@@ -91,6 +106,11 @@ module alerts 'modules/alerts.bicep' = {
     cpuThresholdPercent: cpuThresholdPercent
     memoryThresholdPercent: memoryThresholdPercent
     storageFreeBytesThreshold: storageFreeBytesThreshold
+    memoryAvailableBytesThreshold: memoryAvailableBytesThreshold
+    volumeLatencyReadThresholdSeconds: volumeLatencyReadThresholdSeconds
+    volumeLatencyWriteThresholdSeconds: volumeLatencyWriteThresholdSeconds
+    networkInThresholdBytesPerSecond: networkInThresholdBytesPerSecond
+    networkOutThresholdBytesPerSecond: networkOutThresholdBytesPerSecond
     heartbeatMissingMinutes: heartbeatMissingMinutes
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize

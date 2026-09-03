@@ -50,6 +50,21 @@
     "storageFreeBytesThreshold": {
       "value": 214748364800
     },
+    "memoryAvailableBytesThreshold": {
+      "value": 1073741824
+    },
+    "volumeLatencyReadThresholdSeconds": {
+      "value": "0.5"
+    },
+    "volumeLatencyWriteThresholdSeconds": {
+      "value": "0.5"
+    },
+    "networkInThresholdBytesPerSecond": {
+      "value": 500000000000
+    },
+    "networkOutThresholdBytesPerSecond": {
+      "value": 200000000000
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },
