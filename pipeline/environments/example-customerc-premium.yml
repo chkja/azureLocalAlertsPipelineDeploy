@@ -1,0 +1,26 @@
+# See example-customera-basic.yml for field descriptions. This is the Premium-tier example:
+# same as Advanced plus the enhanced proactive monitoring log alert (error-event rate) and a
+# second email receiver representing the 24/7 on-call rotation required for the Premium SLA.
+
+variables:
+  serviceConnection: 'sc-customerc-prod'
+
+  subscriptionId: '00000000-0000-0000-0000-000000000000'
+  resourceGroupName: 'rg-azurelocal-customerc-prod'
+  location: 'westeurope'
+  createResourceGroup: 'false'
+
+  serviceTier: 'Premium'
+
+  clusterResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customerc-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomerc'
+  logAnalyticsWorkspaceResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customerc-prod/providers/Microsoft.OperationalInsights/workspaces/law-azurelocal-customerc'
+
+  actionGroupName: 'ag-azurelocal-customerc-prod'
+  actionGroupShortName: 'azlalerts'
+
+  emailReceiversJson: '[{"name":"fmp-ops","emailAddress":"azurelocal-ops@example.com","useCommonAlertSchema":true},{"name":"fmp-oncall","emailAddress":"azurelocal-oncall@example.com","useCommonAlertSchema":true}]'
+  webhookReceiversJson: '[{"name":"fmp-itsm-webhook","serviceUri":"https://example.freshservice.com/api/v2/webhook/azurelocal-alerts","useCommonAlertSchema":true}]'
+
+  cpuThresholdPercent: '85'
+  memoryThresholdPercent: '85'
+  heartbeatMissingMinutes: '10'

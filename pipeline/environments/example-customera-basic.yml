@@ -1,0 +1,40 @@
+# One variables file per Azure Local cluster / tenant. Add a new file here to onboard a new
+# customer or cluster, then add its file name (without .yml) to the `environmentFile` allowed
+# values list in pipeline/azure-pipelines.yml.
+#
+# Committing these values in git (instead of an Azure DevOps variable group/library) is the
+# intentional "config as code" approach requested: the CD pipeline re-applies exactly what is
+# committed here on every run, so manual portal edits (drift) get reverted on the next merge to
+# main instead of silently persisting.
+#
+# NOTE: Do not commit real secrets here. Service connection names are safe to commit (they only
+# reference an Azure DevOps service connection, not a credential). Webhook URLs that embed
+# secrets/tokens should instead be stored in an Azure DevOps variable group and referenced here
+# via pipeline variable substitution if your organization requires that.
+
+variables:
+  # Which Azure DevOps service connection (Azure Resource Manager) to deploy with.
+  # This determines which Azure AD tenant / subscription the pipeline authenticates to.
+  serviceConnection: 'sc-customera-prod'
+
+  subscriptionId: '00000000-0000-0000-0000-000000000000'
+  resourceGroupName: 'rg-azurelocal-customera-prod'
+  location: 'westeurope'
+  createResourceGroup: 'false'
+
+  serviceTier: 'Basic'
+
+  clusterResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customera-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomera'
+  # Basic tier has no Log Analytics dependency - leave empty.
+  logAnalyticsWorkspaceResourceId: ''
+
+  actionGroupName: 'ag-azurelocal-customera-prod'
+  actionGroupShortName: 'azlalerts'
+
+  # JSON arrays passed straight through to Deploy-AzureLocalAlerts.ps1.
+  emailReceiversJson: '[{"name":"fmp-ops","emailAddress":"azurelocal-ops@example.com","useCommonAlertSchema":true}]'
+  webhookReceiversJson: '[{"name":"fmp-itsm-webhook","serviceUri":"https://example.freshservice.com/api/v2/webhook/azurelocal-alerts","useCommonAlertSchema":true}]'
+
+  cpuThresholdPercent: '85'
+  memoryThresholdPercent: '85'
+  heartbeatMissingMinutes: '10'

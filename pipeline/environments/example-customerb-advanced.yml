@@ -1,0 +1,27 @@
+# See example-customera-basic.yml for field descriptions. This is the Advanced-tier example:
+# includes the same baseline metric alerts plus capacity metric alerts and log-based alerts,
+# which requires a Log Analytics workspace resource ID (Advanced/Premium prerequisite: Insights
+# log collection must already be enabled on the cluster).
+
+variables:
+  serviceConnection: 'sc-customerb-prod'
+
+  subscriptionId: '00000000-0000-0000-0000-000000000000'
+  resourceGroupName: 'rg-azurelocal-customerb-prod'
+  location: 'westeurope'
+  createResourceGroup: 'false'
+
+  serviceTier: 'Advanced'
+
+  clusterResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customerb-prod/providers/Microsoft.AzureStackHCI/clusters/azlclustercustomerb'
+  logAnalyticsWorkspaceResourceId: '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal-customerb-prod/providers/Microsoft.OperationalInsights/workspaces/law-azurelocal-customerb'
+
+  actionGroupName: 'ag-azurelocal-customerb-prod'
+  actionGroupShortName: 'azlalerts'
+
+  emailReceiversJson: '[{"name":"fmp-ops","emailAddress":"azurelocal-ops@example.com","useCommonAlertSchema":true}]'
+  webhookReceiversJson: '[{"name":"fmp-itsm-webhook","serviceUri":"https://example.freshservice.com/api/v2/webhook/azurelocal-alerts","useCommonAlertSchema":true}]'
+
+  cpuThresholdPercent: '85'
+  memoryThresholdPercent: '85'
+  heartbeatMissingMinutes: '10'
