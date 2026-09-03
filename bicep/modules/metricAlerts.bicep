@@ -37,7 +37,7 @@ param cpuThresholdPercent int = 85
 @description('Memory usage percent threshold that triggers an alert.')
 param memoryThresholdPercent int = 85
 
-@description('Available volume space (bytes) below which a storage-capacity alert fires. Confirmed on a live cluster via the "Volume Size Available" platform metric (REST name "volume size available"). This is an absolute-bytes threshold, not a percentage - Azure Monitor metric alerts cannot compute a ratio between two metrics (Available/Total), so tune this per environment using the actual "Volume Size Total" values for your volumes (see scripts/Get-AzureLocalAlertExploration.ps1, section 1/2). Default: 200 GiB.')
+@description('Available volume space (bytes) below which a storage-capacity alert fires. Confirmed on a live cluster via the "Volume Size Available" platform metric (REST name "volume size available"). This is an absolute-bytes threshold, not a percentage - Azure Monitor metric alerts cannot compute a ratio between two metrics (Available/Total), so tune this per environment using the actual "Volume Size Total" values for your volumes (see docs/service-tiers-and-alerts.md section 4 for the `az monitor metrics list` command). Default: 200 GiB.')
 param storageFreeBytesThreshold int = 214748364800
 
 @description('Available memory (bytes) below which an alert fires. This is the Microsoft-recommended "Available Memory Bytes" alert (metric "Memory\\Available Bytes"), distinct from the percentage-based memoryThresholdPercent alert above - both are deployed. Microsoft\'s documented default is "less than 1 GB"; default here is 1 GiB (1073741824).')
