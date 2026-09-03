@@ -238,23 +238,34 @@ out entirely if you'd rather manage the DCR's event collection yourself.
 
 ### Config-as-code / drift prevention
 
-`pipeline/environments/<name>.yml` files commit, per cluster/tenant: the Azure DevOps service
-connection (tenant), subscription/resource group, service tier, cluster/workspace resource IDs,
-and action group receivers. `pipeline/azure-pipelines.yml` triggers on every push to `main` that
-touches `bicep/**` or `pipeline/environments/**`. Because Bicep deployments are declarative, each
-run re-applies exactly what's committed - reverting any manual portal changes on the next run
-instead of letting configuration drift persist silently. The deny-delete deployment stack setting
-above adds a second layer of protection on top of pipeline-driven redeployment.
+Each cluster/tenant is defined by a **pair** of committed files in `pipeline/environments/`:
+- `<name>.bicepparam` pins every actual Bicep template parameter - service tier, resource
+  group/cluster/workspace resource IDs, thresholds, and action group receivers. This is the file
+  to edit when tuning alert thresholds, changing tier, or onboarding scope.
+- `<name>.yml` pins the non-template, pipeline-level metadata a `.bicepparam` file can't express:
+  which Azure DevOps service connection (tenant) to deploy with, the subscription ID, and (for the
+  script's pre-flight DCR event-log check only) the DCR resource ID. It also points at its
+  companion `.bicepparam` file via the `bicepParamFile` variable.
+
+`pipeline/azure-pipelines.yml` triggers on every push to `main` that touches `bicep/**` or
+`pipeline/environments/**`. Because Bicep deployments are declarative, each run re-applies exactly
+what's committed - reverting any manual portal changes on the next run instead of letting
+configuration drift persist silently. The deny-delete deployment stack setting above adds a second
+layer of protection on top of pipeline-driven redeployment.
 
 To onboard a new cluster:
-1. Copy an existing file in `pipeline/environments/` and fill in the tenant's values.
-2. Add its file name to the `environmentFile` parameter's `values` list in `azure-pipelines.yml`.
+1. Copy an existing `<name>.bicepparam` and `<name>.yml` pair in `pipeline/environments/` and fill
+   in the tenant's values in both.
+2. Add the base file name (without extension) to the `environmentFile` parameter's `values` list
+   in `azure-pipelines.yml`.
 3. Merge to `main` - the pipeline deploys automatically for that environment on the next manual
    run selecting it, or wire a dedicated trigger/stage per environment if you want every commit
    to redeploy every tenant unattended.
 
-To change tier or service connection **once** without touching git, use the `serviceTierOverride` /
-`serviceConnectionOverride` runtime parameters on a manual pipeline run.
+To change service connection **once** without touching git, use the `serviceConnectionOverride`
+runtime parameter on a manual pipeline run. There is no service-tier override at queue time - since
+tier is now a typed Bicep parameter inside the `.bicepparam` file, change it there (or run
+`scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile ...` locally with an edited copy) instead.
 
 ### Standing off-hours notification suppression (Basic/Advanced)
 
@@ -340,11 +351,12 @@ Example - a recurring Saturday-night patch window plus a one-off migration windo
 ]
 ```
 
-Set this as `suppressionWindowsJson` (compact JSON string) in a `pipeline/environments/<name>.yml`
-file, or as the `suppressionWindows` array parameter directly in a `bicep/parameters/*.json` file
-for a one-off manual deployment. `scripts/Deploy-AzureLocalAlerts.ps1` validates the shape up
-front (required fields per `recurrenceType`) before submitting the deployment, so a malformed
-window fails fast with a clear error instead of a deep ARM error.
+Set this as the `suppressionWindows` array parameter in a `pipeline/environments/<name>.bicepparam`
+file (native Bicep array syntax), or pass `-SuppressionWindowsJson` (compact JSON string) to
+`scripts/Deploy-AzureLocalAlerts.ps1` for a one-off manual deployment using explicit parameters.
+`scripts/Deploy-AzureLocalAlerts.ps1` validates the shape up front (required fields per
+`recurrenceType`) before submitting the deployment, so a malformed window fails fast with a clear
+error instead of a deep ARM error.
 
 Suppression rules match on the resource ID(s) in `modules/suppressionRules.bicep`'s `scopes`
 (the cluster resource ID by default) - matching is based on the **affected resource** of the
@@ -472,8 +484,9 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `DcrResourceId` (script param, not a Bicep param) | `''` (auto-discover) | Advanced/Premium - DCR to extend with the new event log channels, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
-All are Bicep parameters - override per environment in `bicep/parameters/*.json` or per pipeline
-run via `pipeline/environments/<name>.yml`.
+All are Bicep parameters - override per environment in `pipeline/environments/<name>.bicepparam`
+(the pipeline-driven source of truth), or in `bicep/parameters/*.json` for a legacy manual
+`az deployment` example.
 
 ## 6. Related reading
 

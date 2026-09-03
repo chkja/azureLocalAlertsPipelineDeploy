@@ -15,11 +15,12 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/actionGroup.bicep` | Action Group with email + webhook receivers |
 | `bicep/modules/metricAlerts.bicep` | Platform metric alerts (storage degraded, CPU, memory) |
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
-| `bicep/parameters/*.parameters.json` | Example parameter sets per tier |
-| `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az deployment sub create` (or `what-if`) |
+| `bicep/parameters/*.parameters.json` | Legacy example parameter sets per tier (JSON; superseded by the `.bicepparam` files below) |
+| `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
 | `scripts/Get-AzureLocalAlertExploration.ps1` | Read-only exploration of metrics/tables against a live cluster |
 | `pipeline/azure-pipelines.yml` | Azure DevOps CD pipeline |
-| `pipeline/environments/*.yml` | Per-tenant/cluster committed config: service connection, tier, resource IDs, receivers |
+| `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. |
+| `pipeline/environments/*.yml` | Per-tenant/cluster pipeline metadata only: service connection, subscription ID, DCR resource ID, and a pointer to the companion `.bicepparam` file |
 
 ## Quick start
 
@@ -30,25 +31,38 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
      -LogAnalyticsWorkspaceId "<workspace-guid>"   # omit for Basic tier
    ```
 2. **Deploy locally** for a quick test (creates/updates an Azure Deployment Stack with
-   `--deny-settings-mode denyDelete`, so managed resources can't be deleted outside the stack):
-   ```powershell
-   az login
-   pwsh -File scripts/Deploy-AzureLocalAlerts.ps1 `
-     -SubscriptionId "<sub-id>" `
-     -ServiceTier "Advanced" `
-     -ResourceGroupName "rg-azurelocal-customera-prod" `
-     -Location "westeurope" `
-     -ClusterResourceId "/subscriptions/.../Microsoft.AzureStackHCI/clusters/<name>" `
-     -LogAnalyticsWorkspaceResourceId "/subscriptions/.../Microsoft.OperationalInsights/workspaces/<law>" `
-     -ActionGroupName "ag-azurelocal-customera-prod" `
-     -ActionGroupShortName "azlalerts" `
-     -EmailReceiversJson '[{"name":"ops","emailAddress":"ops@example.com"}]' `
-     -WebhookReceiversJson '[{"name":"itsm","serviceUri":"https://example.com/webhook"}]' `
-     -WhatIf   # drop this switch to actually deploy (runs `az stack sub validate` vs `create`)
-   ```
+   `--deny-settings-mode denyDelete`, so managed resources can't be deleted outside the stack).
+   Two ways to pass parameters:
+   - **`.bicepparam` file** (recommended - same file the pipeline uses):
+     ```powershell
+     az login
+     pwsh -File scripts/Deploy-AzureLocalAlerts.ps1 `
+       -SubscriptionId "<sub-id>" `
+       -BicepParamFile "pipeline/environments/example-customera-basic.bicepparam" `
+       -DcrResourceId "<dcr-resource-id>" `   # optional; omit/leave empty for Basic tier
+       -WhatIf   # drop this switch to actually deploy (runs `az stack sub validate` vs `create`)
+     ```
+   - **Explicit parameters** (no `.bicepparam` file needed - useful for quick ad-hoc tests):
+     ```powershell
+     az login
+     pwsh -File scripts/Deploy-AzureLocalAlerts.ps1 `
+       -SubscriptionId "<sub-id>" `
+       -ServiceTier "Advanced" `
+       -ResourceGroupName "rg-azurelocal-customera-prod" `
+       -Location "westeurope" `
+       -ClusterResourceId "/subscriptions/.../Microsoft.AzureStackHCI/clusters/<name>" `
+       -LogAnalyticsWorkspaceResourceId "/subscriptions/.../Microsoft.OperationalInsights/workspaces/<law>" `
+       -ActionGroupName "ag-azurelocal-customera-prod" `
+       -ActionGroupShortName "azlalerts" `
+       -EmailReceiversJson '[{"name":"ops","emailAddress":"ops@example.com"}]' `
+       -WebhookReceiversJson '[{"name":"itsm","serviceUri":"https://example.com/webhook"}]' `
+       -WhatIf   # drop this switch to actually deploy (runs `az stack sub validate` vs `create`)
+     ```
    The resource group is always created/ensured as part of this deployment (no separate toggle).
-3. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.yml`, fill in your
-   values, add the file name to the `environmentFile` parameter list in
+3. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.bicepparam` (tier,
+   thresholds, receivers, resource IDs) and `example-customera-basic.yml` (service connection,
+   subscription ID, DCR resource ID) to a new pair of files named after your customer/cluster, fill
+   in both, add the base file name to the `environmentFile` parameter list in
    `pipeline/azure-pipelines.yml`, and merge to `main`.
 
 ## Prerequisites
