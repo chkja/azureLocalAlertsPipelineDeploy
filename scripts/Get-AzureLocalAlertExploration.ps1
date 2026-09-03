@@ -50,9 +50,9 @@ if (-not $LogAnalyticsWorkspaceId) {
 
 Write-Host "`n=== 3. Which tables is the cluster actually sending data to? ===" -ForegroundColor Cyan
 az monitor log-analytics query -w $LogAnalyticsWorkspaceId --analytics-query `
-    "union withsource=TableName *
+    "union withsource=SourceTableName *
 | where TimeGenerated > ago(1d)
-| summarize Count = count() by TableName
+| summarize Count = count() by SourceTableName
 | order by Count desc" --output table
 
 Write-Host "`n=== 4. Perf table: available ObjectName/CounterName combinations (use to tune storage-capacity KQL) ===" -ForegroundColor Cyan
