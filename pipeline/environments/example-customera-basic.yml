@@ -54,4 +54,8 @@ variables:
   # Optional throttle for log-based alerts (ignored - Basic has none): ISO 8601 duration (e.g.
   # 'PT1H') for repeat notifications while an alert remains unresolved. Empty = stateful/single-fire.
   logAlertsMuteActionsDuration: ''
+  # Ignored - Basic has no log-based alerts, so the critical-service-watchdog list and DCR
+  # extension (which only affect log alerts) never apply here.
+  criticalServiceNamesJson: '[]'
+  dcrResourceId: ''
   heartbeatMissingMinutes: '10'

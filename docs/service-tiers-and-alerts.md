@@ -38,6 +38,10 @@ volume health events, and (Premium) proactive anomaly detection.
 | Storage capacity low (per volume) | Metric | ✅ | ✅ | ✅ | metric `Volume Size Available` (dimension-split by `LUN`), absolute bytes threshold |
 | Node heartbeat missing (unreachable node) | Log | ❌ | ✅ | ✅ | `Heartbeat` table, KQL |
 | Volume health degraded | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational` + `Microsoft-Windows-SDDC-Management/Operational`), KQL |
+| General Health Service fault (non-Volume: disk/pool/server/cluster/network/VM) | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational`), KQL |
+| Cluster quorum loss / node isolation | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-FailoverClustering/Operational`, EventID 1205/1573), KQL - requires DCR extension |
+| Critical platform service down (HciSvc/mochostagent/wssdcloudagent/wssdagent) | Log | ❌ | ✅ | ✅ | `Event` table (`System`, Service Control Manager EventID 7031/7034/7036), KQL - requires DCR extension |
+| Hyper-V VM availability (VMMS error / live-migration failure) | Log | ❌ | ✅ | ✅ | `Event` table (Hyper-V VMMS-Admin/High-Availability-Admin, EventID 10650/12400), KQL - requires DCR extension |
 | Elevated Error-event rate (proactive) | Log | ❌ | ❌ | ✅ | `Event` table, KQL |
 | Subscription-wide Resource Health degraded/unavailable | Activity Log | ❌ | ❌ | ✅ | `Microsoft.Insights/activityLogAlerts`, category `ResourceHealth`, scoped to the whole subscription |
 | Subscription-wide Service Health events | Activity Log | ❌ | ❌ | ✅ | `Microsoft.Insights/activityLogAlerts`, category `ServiceHealth` (toggle: `includeServiceHealth`) |
@@ -95,6 +99,24 @@ This directly maps to the service description:
 > parameters/pipeline variables. Note Microsoft's 500/200 GB/s network defaults are extremely
 > high for most NIC speeds - review and lower them per environment.
 
+> **All log alert KQL queries scope to "whatever this Log Analytics workspace contains", not to
+> `clusterResourceId` by text-matching a cluster/computer name.** An earlier revision filtered
+> several queries with `Computer has "<clusterName>"` - live-tested against a real cluster and
+> found to **never match** (Azure Local node `Computer` names like `AZL-1.azl.local` don't embed
+> the cluster's ARM resource name, e.g. `fmazlocal`), which meant the affected alerts (node
+> heartbeat, Premium error-rate) would silently never fire. This has been corrected by removing
+> that filter. The queries now assume the target `logAnalyticsWorkspaceResourceId` is dedicated to
+> (or its Azure Local Insights data only originates from) the one cluster being monitored - true
+> for the standard per-cluster Azure Local Insights onboarding model this repo assumes (see
+> Prerequisites in the service description). **If you consolidate multiple clusters' Insights data
+> into one shared workspace**, you must add your own node-name-based scoping filter to these
+> queries using each cluster's actual Arc machine names (discover them with
+> `Get-AzureLocalAlertExploration.ps1` section 5/9, or `az resource list --resource-type
+> Microsoft.HybridCompute/machines`) - do not reuse the removed `clusterName`-based filter. The
+> one exception, `volumeHealthAlert`, correctly scopes per-cluster already: it cross-references
+> `Microsoft-Windows-SDDC-Management` EventID 3002's `ArmId` field, which genuinely equals
+> `clusterResourceId`.
+
 ## 3. Deployment model
 
 ```
@@ -147,6 +169,72 @@ matters because a `Microsoft.Insights/scheduledQueryRules` (log alert) resource 
 just silently never retrieves data, which otherwise surfaces later as "why did this alert never
 fire" rather than as a deployment failure. The check fails fast, before any ARM call, with a clear
 error identifying the bad workspace ID.
+
+### Extended event log alerts and Data Collection Rule extension (Advanced/Premium)
+
+Beyond the node-heartbeat and volume-health log alerts, Advanced/Premium also deploy:
+
+- **General Health Service fault** - widens coverage to every non-Volume fault type the built-in
+  Health Service tracks (PhysicalDisk, StoragePool, Server, Cluster, Network, VM/VHD, etc. - 80+
+  fault types per [Microsoft's documentation](https://learn.microsoft.com/azure/azure-local/manage/health-service-faults)).
+  Reuses the same `Microsoft-Windows-Health/Operational` channel already collected for
+  `volumeHealthAlert` - **no DCR change required**, it just widens the KQL filter.
+- **Cluster quorum loss / node isolation** (`Microsoft-Windows-FailoverClustering/Operational`,
+  EventID 1205/1573) - matters specifically because it can happen even when the Health Service
+  itself is degraded or unreachable.
+- **Critical platform service down** (`System` log, Service Control Manager EventID 7031/7034/7036)
+  - watches `HciSvc` (the Health Service itself - if it stops, every Health-Service-based alert
+  above goes silent) plus the MOC/Arc Resource Bridge agents (`mochostagent`, `wssdcloudagent`,
+  `wssdagent`) used for Arc VM/AKS hybrid workload management on the cluster.
+- **Hyper-V VM availability** (`Microsoft-Windows-Hyper-V-VMMS-Admin` EventID 10650,
+  `Microsoft-Windows-Hyper-V-High-Availability-Admin` EventID 12400) - VMMS service errors and
+  live-migration failures.
+
+> **Why not alert on the full raw Failover Clustering / S2D event-ID list (1069, 1146, 5120,
+> 5142-5145)?** Microsoft's own guidance is to prefer the built-in Health Service over tracking
+> raw Windows Event IDs manually. Investigation against a live cluster's Log Analytics workspace
+> confirmed the Health Service (`Microsoft-Windows-Health/Operational`) already reports faults
+> across Cluster, Storage (physical/virtual disk, pool, volume), Network, and VM/VHD categories -
+> functionally overlapping almost all of the S2D event-ID list (5142-5145: pool degraded, disk
+> failed, high latency, repair failed). Rather than duplicate that coverage with fragile raw-event
+> parsing, the **general Health Service fault alert above** (data already collected, no DCR
+> change) captures it. Only the genuinely non-overlapping raw signals - quorum loss/node
+> isolation, service-down watchdog, Hyper-V availability - were added as new alerts.
+
+**These 3 new log alerts require Data Collection Rule (DCR) changes** the default Azure Local
+Insights DCR does not include: the `Microsoft-Windows-FailoverClustering/Operational`, `System`,
+`Microsoft-Windows-Hyper-V-VMMS-Admin`, and `Microsoft-Windows-Hyper-V-High-Availability-Admin`
+Windows Event Log channels. Confirmed live: the tested cluster's DCR only forwarded
+`Microsoft-Windows-SDDC-Management/Operational` (EventID 3000-3004) and
+`microsoft-windows-health/operational` - none of the above.
+
+Because the DCR is a shared prerequisite resource (typically created during onboarding/Arc setup
+and associated with every Arc node in the cluster - see the service description's "Data
+Collection Rule/Data Collection Endpoint associations in place" prerequisite), `Deploy-AzureLocalAlerts.ps1`
+extends it **outside the deployment stack**, as a direct idempotent GET-merge-PUT against the
+live resource, rather than bringing it into the Bicep template/stack:
+1. **Discovery**: if `-DcrResourceId` isn't supplied, `Find-AzureLocalDcrResourceId` looks up a
+   `Microsoft.HybridCompute/machines` (Arc node) resource in the cluster's resource group and
+   reads its DCR association (`az monitor data-collection rule association list --resource <nodeId>`).
+2. **Merge**: `Set-AzureLocalDcrEventCollection` fetches the DCR's full current definition,
+   appends any missing `xPathQueries` to the existing `windowsEventLogs` data source (leaving
+   `performanceCounters`, `dataFlows`, `destinations`, and everything else untouched), and no-ops
+   if all four queries are already present (safe to run on every pipeline execution).
+3. Runs only during an actual apply, **never during `-WhatIf`/validate** (no live mutation during
+   a validation-only run), and any failure here is a warning, not a deployment blocker - the
+   Bicep-deployed alerts still succeed, they just won't receive data for these specific channels
+   until the DCR is resolved (auto-discovery, an explicit `-DcrResourceId`, or a manual DCR
+   update).
+
+Set `-SkipDcrUpdate` (or leave `dcrResourceId` empty and no Arc node association exists) to opt
+out entirely if you'd rather manage the DCR's event collection yourself.
+
+> **Verify `criticalServiceNames` against your own nodes.** The Service Control Manager event
+> message shows each service's *DisplayName*, not its short name, and exact display names can
+> vary slightly by Azure Local build. Run
+> `Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent | Select-Object Name, DisplayName`
+> on a node and adjust the `criticalServiceNames` parameter/`criticalServiceNamesJson` pipeline
+> variable if your DisplayNames differ from the shipped defaults.
 
 ### Config-as-code / drift prevention
 
@@ -368,6 +456,8 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `serviceHoursStart` / `serviceHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
 | `serviceHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the service-hours window |
 | `logAlertsMuteActionsDuration` | `''` (disabled) | Advanced/Premium log alerts only - re-notification throttle, see section 3 |
+| `criticalServiceNames` | HciSvc/mochostagent/wssdcloudagent/wssdagent (short+display names) | Advanced/Premium critical-service-down watchdog - verify DisplayNames against your nodes |
+| `DcrResourceId` (script param, not a Bicep param) | `''` (auto-discover) | Advanced/Premium - DCR to extend with the new event log channels, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
 All are Bicep parameters - override per environment in `bicep/parameters/*.json` or per pipeline

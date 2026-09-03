@@ -42,4 +42,13 @@ variables:
   # Premium's 24/7 on-call to be re-paged periodically on a long-running unresolved incident.
   # Empty (default) = stateful/single-fire (one Fired, one Resolved notification).
   logAlertsMuteActionsDuration: ''
+  # Substrings matched against Service Control Manager events for the critical-service-down
+  # watchdog alert (HciSvc/mochostagent/wssdcloudagent/wssdagent) - verify against your nodes'
+  # exact DisplayName (Get-Service ... | Select-Object Name, DisplayName) and adjust if needed.
+  criticalServiceNamesJson: '["HciSvc","Health Service","mochostagent","MOC HostAgent","wssdcloudagent","WSSD Cloud Agent","wssdagent","WSSD Agent"]'
+  # ARM resource ID of the Data Collection Rule collecting this cluster's Windows Event Logs.
+  # Leave empty to attempt auto-discovery from an Arc node in clusterResourceId's resource group.
+  # Required (directly or via auto-discovery) for the cluster-quorum/service-watchdog/Hyper-V
+  # log alerts to actually receive data - see docs/service-tiers-and-alerts.md.
+  dcrResourceId: ''
   heartbeatMissingMinutes: '10'

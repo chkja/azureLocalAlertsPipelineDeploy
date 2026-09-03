@@ -84,4 +84,34 @@ az monitor log-analytics query -w $LogAnalyticsWorkspaceId --analytics-query `
 | summarize ErrorCount = count() by bin(TimeGenerated, 5m)
 | summarize AvgPer5Min = avg(ErrorCount), MaxPer5Min = max(ErrorCount)" --output table
 
+Write-Host "`n=== 8. Health Service faults: distinct ObjectType/Severity combinations seen (validate generalHealthFaultAlert coverage) ===" -ForegroundColor Cyan
+az monitor log-analytics query -w $LogAnalyticsWorkspaceId --analytics-query `
+    "Event
+| where EventLog == 'Microsoft-Windows-Health/Operational'
+| extend d = parse_json(RenderedDescription)
+| summarize Count = count() by ObjectType = tostring(d.Fault.ObjectType), Severity = toint(d.Fault.Severity)
+| order by Count desc" --output table
+
+Write-Host "`n=== 9. Data Collection Rule: find the DCR associated with this cluster's Arc nodes, and its current event log channels ===" -ForegroundColor Cyan
+Write-Host "(Needed for the cluster-quorum/critical-service-down/Hyper-V log alerts to receive data - see docs/service-tiers-and-alerts.md 'Extended event log collection (DCR)'.)" -ForegroundColor DarkGray
+$clusterRgMatch = [regex]::Match($ClusterResourceId, '(?i)^/subscriptions/[^/]+/resourceGroups/(?<rg>[^/]+)/')
+if ($clusterRgMatch.Success) {
+    $clusterRg = $clusterRgMatch.Groups['rg'].Value
+    $firstNodeId = az resource list -g $clusterRg --resource-type 'Microsoft.HybridCompute/machines' --query '[0].id' -o tsv 2>$null
+    if ($firstNodeId) {
+        az monitor data-collection rule association list --resource $firstNodeId --output table
+        $dcrId = az monitor data-collection rule association list --resource $firstNodeId --query '[0].dataCollectionRuleId' -o tsv 2>$null
+        if ($dcrId) {
+            Write-Host "`nCurrent windowsEventLogs xPathQueries on DCR '$dcrId':" -ForegroundColor Cyan
+            az resource show --ids $dcrId --query "properties.dataSources.windowsEventLogs[0].xPathQueries" -o table
+        }
+    }
+    else {
+        Write-Host "No Microsoft.HybridCompute/machines resource found in resource group '$clusterRg' - cannot look up the DCR association." -ForegroundColor Yellow
+    }
+}
+else {
+    Write-Host "Could not parse a resource group from -ClusterResourceId - skipping DCR discovery." -ForegroundColor Yellow
+}
+
 Write-Host "`nDone. Use these results to validate metric names in bicep/modules/metricAlerts.bicep and tune KQL/thresholds in bicep/modules/logAlerts.bicep." -ForegroundColor Green

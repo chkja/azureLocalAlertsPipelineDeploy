@@ -91,6 +91,9 @@
     "logAlertsMuteActionsDuration": {
       "value": ""
     },
+    "criticalServiceNames": {
+      "value": ["HciSvc", "Health Service", "mochostagent", "MOC HostAgent", "wssdcloudagent", "WSSD Cloud Agent", "wssdagent", "WSSD Agent"]
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

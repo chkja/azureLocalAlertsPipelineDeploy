@@ -86,6 +86,9 @@
     "logAlertsMuteActionsDuration": {
       "value": ""
     },
+    "criticalServiceNames": {
+      "value": []
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

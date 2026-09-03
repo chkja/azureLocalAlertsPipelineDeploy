@@ -91,6 +91,31 @@
     Microsoft.Insights/metricAlerts) - those remain purely stateful regardless of this setting.
     Default '' (disabled).
 
+.PARAMETER CriticalServiceNamesJson
+    Advanced/Premium only. JSON array of substrings to match against Service Control Manager
+    event messages for the critical-service-down watchdog alert (HciSvc / mochostagent /
+    wssdcloudagent / wssdagent). Default covers short names and plausible display names - verify
+    against your own nodes (`Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent |
+    Select-Object Name, DisplayName`) and override if needed.
+
+.PARAMETER DcrResourceId
+    ARM resource ID of the Data Collection Rule (Microsoft.Insights/dataCollectionRules) that
+    collects Windows Event Logs for this cluster's nodes. Advanced/Premium only. When supplied
+    (or auto-discovered - see DESCRIPTION), the script extends the DCR's "System" and
+    "Microsoft-Windows-FailoverClustering/Operational" / Hyper-V event log collection so the new
+    cluster-quorum, critical-service-down, and Hyper-V-availability log alerts actually receive
+    data. This update runs OUTSIDE the deployment stack (a direct `az rest` PUT merge against the
+    live resource) - the DCR is a shared prerequisite resource typically owned/created by the
+    customer's onboarding/Arc setup, not something this stack should track or could safely
+    delete. If not supplied, the script attempts to auto-discover it from a
+    Microsoft.HybridCompute/machines resource in ClusterResourceId's resource group. Auto-discovery
+    or the update itself failing is a non-fatal warning, not a deployment blocker - the alerts
+    still deploy, they just won't receive data for those specific event log channels until the
+    DCR is extended (manually, or by re-running with a valid DcrResourceId).
+
+.PARAMETER SkipDcrUpdate
+    Switch. Skip DCR discovery/extension entirely, even for Advanced/Premium.
+
 .PARAMETER DeploymentStackName
     Name of the deployment stack resource. Defaults to "stack-azurelocal-alerts-<ResourceGroupName>".
     Re-running with the same name updates the existing stack; a different name creates a new one.
@@ -198,6 +223,15 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$LogAlertsMuteActionsDuration = '',
+
+    [Parameter(Mandatory = $false)]
+    [string]$CriticalServiceNamesJson = '["HciSvc","Health Service","mochostagent","MOC HostAgent","wssdcloudagent","WSSD Cloud Agent","wssdagent","WSSD Agent"]',
+
+    [Parameter(Mandatory = $false)]
+    [string]$DcrResourceId = '',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipDcrUpdate,
 
     [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
@@ -316,6 +350,149 @@ function Assert-IsoDuration {
     }
 }
 
+function Find-AzureLocalDcrResourceId {
+    <#
+        Best-effort auto-discovery of the Data Collection Rule associated with this cluster's
+        nodes: lists Microsoft.HybridCompute/machines in the cluster's resource group, and
+        returns the DataCollectionRuleId from the first node's DCR association. Returns $null
+        (with a warning) if no Arc machines or no association is found - callers must treat this
+        as non-fatal.
+    #>
+    param([string]$ClusterResourceId)
+
+    if ($ClusterResourceId -notmatch '(?i)^/subscriptions/(?<sub>[^/]+)/resourceGroups/(?<rg>[^/]+)/providers/Microsoft\.AzureStackHCI/clusters/[^/]+$') {
+        Write-Warning "Could not parse resource group from ClusterResourceId '$ClusterResourceId' - skipping DCR auto-discovery."
+        return $null
+    }
+    $clusterRg = $Matches['rg']
+
+    $machinesJson = az resource list -g $clusterRg --resource-type 'Microsoft.HybridCompute/machines' -o json 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($machinesJson)) {
+        Write-Warning "No Microsoft.HybridCompute/machines resources found in resource group '$clusterRg' - skipping DCR auto-discovery."
+        return $null
+    }
+    $machines = @($machinesJson | ConvertFrom-Json)
+    if ($machines.Count -eq 0) {
+        Write-Warning "No Arc-enabled node (Microsoft.HybridCompute/machines) found in resource group '$clusterRg' - skipping DCR auto-discovery."
+        return $null
+    }
+
+    foreach ($machine in $machines) {
+        $associationsJson = az monitor data-collection rule association list --resource $machine.id -o json 2>$null
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($associationsJson)) {
+            continue
+        }
+        $associations = @($associationsJson | ConvertFrom-Json)
+        $dcrId = $associations | Where-Object { $_.dataCollectionRuleId } | Select-Object -First 1 -ExpandProperty dataCollectionRuleId
+        if ($dcrId) {
+            Write-Host "==> Auto-discovered DCR '$dcrId' via node '$($machine.name)'." -ForegroundColor Green
+            return $dcrId
+        }
+    }
+
+    Write-Warning "No Data Collection Rule association found on any node in resource group '$clusterRg' - skipping DCR auto-discovery."
+    return $null
+}
+
+function Set-AzureLocalDcrEventCollection {
+    <#
+        Idempotently extends an existing Data Collection Rule's Windows Event Log collection
+        (dataSources.windowsEventLogs) with the additional xPathQueries required by the new
+        cluster-quorum, critical-service-down, and Hyper-V-availability log alerts, WITHOUT
+        touching any other configuration on the DCR (performance counters, other data sources,
+        destinations, data flows are preserved as-is).
+
+        Runs as a direct `az rest` GET-merge-PUT against the live resource, deliberately outside
+        the deployment stack: the DCR is a shared prerequisite resource (typically owned by the
+        customer's onboarding/Arc setup, associated with every Arc node in the cluster), not
+        something this stack should track or risk deleting via ActionOnUnmanage.
+
+        Non-fatal on any failure - logs a warning and returns, since the alerts themselves still
+        deploy successfully; they just won't receive data for these specific channels until the
+        DCR is extended.
+    #>
+    param([string]$DcrResourceId)
+
+    $apiVersion = '2023-03-11'
+
+    if ($DcrResourceId -notmatch '(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Insights/dataCollectionRules/[^/]+$') {
+        Write-Warning "DcrResourceId '$DcrResourceId' is not a valid Data Collection Rule resource ID - skipping DCR event collection update."
+        return
+    }
+
+    Write-Host "==> Checking Data Collection Rule event collection: $DcrResourceId" -ForegroundColor Cyan
+
+    $requiredXPathQueries = @(
+        'Microsoft-Windows-FailoverClustering/Operational!*[System[(EventID=1205 or EventID=1573)]]',
+        "System!*[System[Provider[@Name='Service Control Manager'] and (EventID=7031 or EventID=7034 or EventID=7036)]]",
+        'Microsoft-Windows-Hyper-V-VMMS-Admin!*[System[(EventID=10650)]]',
+        'Microsoft-Windows-Hyper-V-High-Availability-Admin!*[System[(EventID=12400)]]'
+    )
+
+    $dcrJson = az rest --method get --uri "https://management.azure.com${DcrResourceId}?api-version=$apiVersion" -o json 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dcrJson)) {
+        Write-Warning "Could not read Data Collection Rule '$DcrResourceId' (not found, or not accessible with current credentials) - skipping DCR event collection update. The new cluster-quorum/service-watchdog/Hyper-V log alerts will deploy but won't receive data until this is resolved."
+        return
+    }
+
+    $dcr = $dcrJson | ConvertFrom-Json
+    if (-not $dcr.properties.dataSources) {
+        Write-Warning "Data Collection Rule '$DcrResourceId' has no dataSources - skipping DCR event collection update (unexpected shape for an Azure Local Insights DCR)."
+        return
+    }
+    if (-not $dcr.properties.dataSources.windowsEventLogs -or @($dcr.properties.dataSources.windowsEventLogs).Count -eq 0) {
+        Write-Warning "Data Collection Rule '$DcrResourceId' has no windowsEventLogs data source configured - skipping DCR event collection update. Add an eventLogsDataSource manually, or re-run once one exists."
+        return
+    }
+
+    $eventDataSource = $dcr.properties.dataSources.windowsEventLogs[0]
+    $existingQueries = @($eventDataSource.xPathQueries)
+    $missingQueries = $requiredXPathQueries | Where-Object { $existingQueries -notcontains $_ }
+
+    if ($missingQueries.Count -eq 0) {
+        Write-Host "==> Data Collection Rule already collects all required event log channels - no update needed." -ForegroundColor Green
+        return
+    }
+
+    Write-Host "==> Adding $($missingQueries.Count) missing xPathQuery/queries to DCR '$($dcr.name)':" -ForegroundColor Cyan
+    $missingQueries | ForEach-Object { Write-Host "    + $_" -ForegroundColor Cyan }
+
+    $eventDataSource.xPathQueries = @($existingQueries + $missingQueries)
+
+    # PUT only the writable subset of the resource (location + properties, minus read-only
+    # sub-properties) - never send etag/systemData/id/name/type, and strip properties that ARM
+    # only returns (immutableId, provisioningState), otherwise the PUT is rejected or ignored.
+    $putBody = [ordered]@{
+        location   = $dcr.location
+        properties = [ordered]@{
+            dataCollectionEndpointId = $dcr.properties.dataCollectionEndpointId
+            dataFlows                = $dcr.properties.dataFlows
+            dataSources              = $dcr.properties.dataSources
+            destinations             = $dcr.properties.destinations
+        }
+    }
+    if ($dcr.PSObject.Properties.Name -contains 'tags' -and $dcr.tags) {
+        $putBody['tags'] = $dcr.tags
+    }
+    if ($dcr.PSObject.Properties.Name -contains 'kind' -and $dcr.kind) {
+        $putBody['kind'] = $dcr.kind
+    }
+
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $putBody | ConvertTo-Json -Depth 20 | Set-Content -Path $tempFile -Encoding utf8
+        az rest --method put --uri "https://management.azure.com${DcrResourceId}?api-version=$apiVersion" --body "@$tempFile" -o none
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to update Data Collection Rule '$DcrResourceId' with the merged event collection - the new log alerts will deploy but won't receive data until this is resolved manually."
+            return
+        }
+        Write-Host "==> Data Collection Rule updated successfully." -ForegroundColor Green
+    }
+    finally {
+        Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host "==> Validating parameters for tier '$ServiceTier'..." -ForegroundColor Cyan
 
 if ($ServiceTier -in @('Advanced', 'Premium') -and [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceResourceId)) {
@@ -328,9 +505,11 @@ if ($ActionOnUnmanage -eq 'deleteAll') {
 
 Assert-JsonArray -Value $EmailReceiversJson -ParamName 'EmailReceiversJson'
 Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
+Assert-JsonArray -Value $CriticalServiceNamesJson -ParamName 'CriticalServiceNamesJson'
 
 $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
 $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
+$criticalServiceNames = @($CriticalServiceNamesJson | ConvertFrom-Json)
 $suppressionWindows = Assert-SuppressionWindows -Json $SuppressionWindowsJson
 Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
 
@@ -348,6 +527,26 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to set subscription context." }
 
 if ($ServiceTier -in @('Advanced', 'Premium')) {
     Test-LogAnalyticsWorkspaceExists -WorkspaceResourceId $LogAnalyticsWorkspaceResourceId
+
+    if ($WhatIf) {
+        Write-Host "==> -WhatIf set - not checking/extending the Data Collection Rule's event collection (no live mutation during validation)." -ForegroundColor Yellow
+    }
+    elseif (-not $SkipDcrUpdate) {
+        $effectiveDcrResourceId = $DcrResourceId
+        if ([string]::IsNullOrWhiteSpace($effectiveDcrResourceId)) {
+            Write-Host "==> No -DcrResourceId supplied, attempting auto-discovery..." -ForegroundColor Cyan
+            $effectiveDcrResourceId = Find-AzureLocalDcrResourceId -ClusterResourceId $ClusterResourceId
+        }
+        if (-not [string]::IsNullOrWhiteSpace($effectiveDcrResourceId)) {
+            Set-AzureLocalDcrEventCollection -DcrResourceId $effectiveDcrResourceId
+        }
+        else {
+            Write-Warning "No Data Collection Rule identified (supply -DcrResourceId, or ensure the cluster's Arc nodes have a DCR association) - the new cluster-quorum/service-watchdog/Hyper-V log alerts will deploy but won't receive data until this is resolved."
+        }
+    }
+    else {
+        Write-Host "==> -SkipDcrUpdate set - not checking/extending the Data Collection Rule's event collection." -ForegroundColor Yellow
+    }
 }
 
 # `az stack` is a core Azure CLI command since 2.61; fall back to the extension on older CLIs.
@@ -365,6 +564,7 @@ $templateFile = Join-Path $repoRoot 'bicep/main.bicep'
 $emailReceiversCompact = ($emailReceivers | ConvertTo-Json -Compress -AsArray)
 $webhookReceiversCompact = ($webhookReceivers | ConvertTo-Json -Compress -AsArray)
 $suppressionWindowsCompact = ($suppressionWindows | ConvertTo-Json -Compress -AsArray)
+$criticalServiceNamesCompact = ($criticalServiceNames | ConvertTo-Json -Compress -AsArray)
 $includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
 $enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
 
@@ -397,6 +597,7 @@ $templateParameters = @(
     "serviceHoursEnd=$ServiceHoursEnd",
     "serviceHoursTimeZone=$ServiceHoursTimeZone",
     "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
+    "criticalServiceNames=$criticalServiceNamesCompact",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 
