@@ -621,9 +621,13 @@ $azArgs = @(
     '--parameters', $templateParameters,
     '--deny-settings-mode', $DenySettingsMode,
     '--action-on-unmanage', $ActionOnUnmanage,
-    '--description', "Azure Local alerts ($ServiceTier) for $ClusterResourceId",
-    '--yes'
+    '--description', "Azure Local alerts ($ServiceTier) for $ClusterResourceId"
 )
+# `az stack sub validate` doesn't accept --yes (there's nothing to confirm - it's read-only);
+# only `create` prompts for confirmation of the deny-settings/action-on-unmanage behavior.
+if ($stackAction -eq 'create') {
+    $azArgs += '--yes'
+}
 
 Write-Host "==> Running: az $($azArgs -join ' ')" -ForegroundColor Cyan
 
