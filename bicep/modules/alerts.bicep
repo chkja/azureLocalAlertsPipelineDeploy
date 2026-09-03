@@ -184,10 +184,18 @@ module activityLogAlerts 'activityLogAlerts.bicep' = if (isPremium) {
 
 // All tiers: maintenance-window suppression rules. An empty suppressionWindows array (the
 // default) deploys zero rules - safe to always include this module.
+// Log-based alerts (scheduledQueryRules, Advanced/Premium only) are scoped to
+// logAnalyticsWorkspaceResourceId, not clusterResourceId - Alert Processing Rules match on the
+// alert's actual target resource, so the workspace must also be included in scopes or none of
+// the log alerts (heartbeat, volume health, general health fault, quorum, service watchdog,
+// Hyper-V) will ever actually be suppressed by these rules. Confirmed live: a log alert showed
+// "Suppression status: None" in the portal despite an active suppression rule, because its
+// scopes list only contained the cluster resource ID.
 module suppressionRules 'suppressionRules.bicep' = {
   name: 'deploy-suppression-rules'
   params: {
     clusterResourceId: clusterResourceId
+    additionalScopes: isAdvancedOrPremium ? [logAnalyticsWorkspaceResourceId] : []
     suppressionWindows: suppressionWindows
   }
 }
@@ -199,6 +207,9 @@ module offHoursSuppression 'offHoursSuppression.bicep' = if (!isPremium && enabl
   name: 'deploy-offhours-suppression'
   params: {
     clusterResourceId: clusterResourceId
+    // See the comment on suppressionRules above - same fix applies here (Advanced-tier log
+    // alerts are scoped to the workspace, not the cluster).
+    additionalScopes: isAdvancedOrPremium ? [logAnalyticsWorkspaceResourceId] : []
     serviceHoursStart: serviceHoursStart
     serviceHoursEnd: serviceHoursEnd
     serviceHoursTimeZone: serviceHoursTimeZone
