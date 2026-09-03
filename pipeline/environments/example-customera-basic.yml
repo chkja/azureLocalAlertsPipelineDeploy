@@ -44,4 +44,11 @@ variables:
   networkOutThresholdBytesPerSecond: '200000000000'
   includeServiceHealth: 'true'
   suppressionWindowsJson: '[]'
+  # Suppress action-group notifications outside the committed Basic service window (per the
+  # service description: "alerts will only be responded to during service window"). Alert rules
+  # still evaluate 24/7 - only notifications are silenced outside these hours.
+  enableOffHoursSuppression: 'true'
+  serviceHoursStart: '07:00:00'
+  serviceHoursEnd: '17:00:00'
+  serviceHoursTimeZone: 'Romance Standard Time'
   heartbeatMissingMinutes: '10'

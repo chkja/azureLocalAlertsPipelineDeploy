@@ -71,6 +71,18 @@
     "suppressionWindows": {
       "value": []
     },
+    "enableOffHoursSuppression": {
+      "value": true
+    },
+    "serviceHoursStart": {
+      "value": "07:00:00"
+    },
+    "serviceHoursEnd": {
+      "value": "17:00:00"
+    },
+    "serviceHoursTimeZone": {
+      "value": "Romance Standard Time"
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

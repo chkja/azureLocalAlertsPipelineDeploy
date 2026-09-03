@@ -96,6 +96,18 @@ for worked examples. Default: [] (no suppression rules).
 ''')
 param suppressionWindows array = []
 
+@description('Suppress action-group notifications outside the committed service/working-hours window for Basic/Advanced (ignored for Premium, which commits to 24/7 response). Default: true.')
+param enableOffHoursSuppression bool = true
+
+@description('Daily start of the committed service/working-hours window, "HH:mm:ss", Monday-Friday.')
+param serviceHoursStart string = '07:00:00'
+
+@description('Daily end of the committed service/working-hours window, "HH:mm:ss".')
+param serviceHoursEnd string = '17:00:00'
+
+@description('Windows time zone name the service-hours window is evaluated in.')
+param serviceHoursTimeZone string = 'Romance Standard Time'
+
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
@@ -129,6 +141,10 @@ module alerts 'modules/alerts.bicep' = {
     severityPremium: severityPremium
     includeServiceHealth: includeServiceHealth
     suppressionWindows: suppressionWindows
+    enableOffHoursSuppression: enableOffHoursSuppression
+    serviceHoursStart: serviceHoursStart
+    serviceHoursEnd: serviceHoursEnd
+    serviceHoursTimeZone: serviceHoursTimeZone
   }
   dependsOn: [
     rg

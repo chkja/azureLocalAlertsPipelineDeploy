@@ -65,6 +65,22 @@
     "startTime":"22:00:00", "endTime":"02:00:00", "daysOfWeek":["Saturday"]}. See
     bicep/modules/suppressionRules.bicep for the full shape (recurrenceType None/Daily/Weekly/Monthly).
 
+.PARAMETER EnableOffHoursSuppression
+    Basic/Advanced only (ignored for Premium, which commits to 24/7 response). Deploys a standing
+    weekly suppression schedule (bicep/modules/offHoursSuppression.bicep) that silences
+    action-group notifications outside ServiceHoursStart/ServiceHoursEnd, Monday-Friday. Alert
+    rules still evaluate around the clock - only notifications are suppressed. Default $true.
+
+.PARAMETER ServiceHoursStart
+    Daily start of the committed service/working-hours window, "HH:mm:ss", Monday-Friday. Only
+    used when EnableOffHoursSuppression is set and ServiceTier is not Premium. Default '07:00:00'.
+
+.PARAMETER ServiceHoursEnd
+    Daily end of the committed service/working-hours window, "HH:mm:ss". Default '17:00:00'.
+
+.PARAMETER ServiceHoursTimeZone
+    Windows time zone name the service-hours window is evaluated in. Default 'Romance Standard Time'.
+
 .PARAMETER DeploymentStackName
     Name of the deployment stack resource. Defaults to "stack-azurelocal-alerts-<ResourceGroupName>".
     Re-running with the same name updates the existing stack; a different name creates a new one.
@@ -157,6 +173,18 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$SuppressionWindowsJson = '[]',
+
+    [Parameter(Mandatory = $false)]
+    [bool]$EnableOffHoursSuppression = $true,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ServiceHoursStart = '07:00:00',
+
+    [Parameter(Mandatory = $false)]
+    [string]$ServiceHoursEnd = '17:00:00',
+
+    [Parameter(Mandatory = $false)]
+    [string]$ServiceHoursTimeZone = 'Romance Standard Time',
 
     [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
@@ -304,6 +332,7 @@ $emailReceiversCompact = ($emailReceivers | ConvertTo-Json -Compress -AsArray)
 $webhookReceiversCompact = ($webhookReceivers | ConvertTo-Json -Compress -AsArray)
 $suppressionWindowsCompact = ($suppressionWindows | ConvertTo-Json -Compress -AsArray)
 $includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
+$enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
 
 if ([string]::IsNullOrWhiteSpace($DeploymentStackName)) {
     $DeploymentStackName = "stack-azurelocal-alerts-$ResourceGroupName"
@@ -329,6 +358,10 @@ $templateParameters = @(
     "networkOutThresholdBytesPerSecond=$NetworkOutThresholdBytesPerSecond",
     "includeServiceHealth=$includeServiceHealthValue",
     "suppressionWindows=$suppressionWindowsCompact",
+    "enableOffHoursSuppression=$enableOffHoursSuppressionValue",
+    "serviceHoursStart=$ServiceHoursStart",
+    "serviceHoursEnd=$ServiceHoursEnd",
+    "serviceHoursTimeZone=$ServiceHoursTimeZone",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 

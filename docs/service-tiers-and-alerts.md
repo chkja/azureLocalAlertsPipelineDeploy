@@ -107,7 +107,8 @@ bicep/main.bicep                     (subscription scope, optional RG creation)
        │                                   only if Advanced/Premium)
        ├─ modules/logAlerts.bicep         (heartbeat + volume-health if Advanced/Premium; error-rate if Premium)
        ├─ modules/activityLogAlerts.bicep (Premium only - subscription-wide Resource/Service Health)
-       └─ modules/suppressionRules.bicep  (all tiers - maintenance-window suppression rules)
+       ├─ modules/suppressionRules.bicep  (all tiers - ad hoc maintenance-window suppression rules)
+       └─ modules/offHoursSuppression.bicep (Basic/Advanced only - standing weekly off-hours suppression)
 ```
 
 One Action Group per cluster is reused by every alert rule for that cluster, and supports both
@@ -166,6 +167,34 @@ To onboard a new cluster:
 
 To change tier or service connection **once** without touching git, use the `serviceTierOverride` /
 `serviceConnectionOverride` runtime parameters on a manual pipeline run.
+
+### Standing off-hours notification suppression (Basic/Advanced)
+
+Per the service description, Basic alerts are "only responded to during service window" and
+Advanced alerts are triaged "during working hours" - only Premium commits to 24/7 response.
+`modules/offHoursSuppression.bicep` implements this directly: for Basic and Advanced (controlled
+by the `enableOffHoursSuppression` parameter, default `true`; Premium ignores it and is always
+24/7), it deploys a **standing weekly** `Microsoft.AlertsManagement/actionRules` schedule that
+silences action-group notifications outside `serviceHoursStart`-`serviceHoursEnd` (default
+`07:00:00`-`17:00:00`), Monday-Friday, in the `serviceHoursTimeZone` (default `Romance Standard
+Time` / Copenhagen). Alert rules still evaluate around the clock in every tier - nothing is ever
+silently missed, and the full history remains visible/queryable - only the notification is
+suppressed outside the committed hours.
+
+This is a separate mechanism from the maintenance-window suppression rules below: it's a fixed,
+tier-derived standing schedule (not something an operator hand-authors), and covers the full week
+using four rules to correctly handle midnight-crossing evenings and the two non-working days:
+
+| Rule | Coverage (default 07:00-17:00 Mon-Fri) |
+|---|---|
+| Weekday evening → next morning | Mon 17:00 → Tue 07:00, ... , Fri 17:00 → Sat 07:00 |
+| Monday early morning | Mon 00:00 → 07:00 (not covered by the rule above, since Sunday isn't a working day) |
+| Saturday | All day |
+| Sunday | All day |
+
+Set `enableOffHoursSuppression: false` (or the `enableOffHoursSuppression` pipeline variable to
+`'false'`) to opt a specific Basic/Advanced cluster out of this behavior (e.g. if the customer
+wants 24/7 paging despite a Basic/Advanced contract).
 
 ### Maintenance-window suppression rules (all tiers)
 
@@ -308,7 +337,10 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `networkOutThresholdBytesPerSecond` | 200000000000 (200 GB/s) | MS-recommended default - very high, review per NIC speed |
 | `heartbeatMissingMinutes` | 10 | Node considered unreachable |
 | `includeServiceHealth` | `true` | Premium only - also deploy the subscription-wide Service Health activity log alert |
-| `suppressionWindows` | `[]` | All tiers - maintenance-window suppression rules, see section 3 |
+| `suppressionWindows` | `[]` | All tiers - ad hoc maintenance-window suppression rules, see section 3 |
+| `enableOffHoursSuppression` | `true` (Basic/Advanced), `false` (Premium) | Standing weekly off-hours notification suppression, see section 3 |
+| `serviceHoursStart` / `serviceHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
+| `serviceHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the service-hours window |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
 All are Bicep parameters - override per environment in `bicep/parameters/*.json` or per pipeline

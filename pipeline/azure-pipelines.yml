@@ -130,6 +130,10 @@ stages:
                   NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
                   IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
                   SuppressionWindowsJson            = '$(suppressionWindowsJson)'
+                  EnableOffHoursSuppression        = [bool]::Parse('$(enableOffHoursSuppression)')
+                  ServiceHoursStart                = '$(serviceHoursStart)'
+                  ServiceHoursEnd                  = '$(serviceHoursEnd)'
+                  ServiceHoursTimeZone              = '$(serviceHoursTimeZone)'
                   HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
                   DenySettingsMode                 = 'denyDelete'
                   ActionOnUnmanage                 = 'deleteResources'
@@ -179,6 +183,10 @@ stages:
                         NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
                         IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
                         SuppressionWindowsJson            = '$(suppressionWindowsJson)'
+                        EnableOffHoursSuppression        = [bool]::Parse('$(enableOffHoursSuppression)')
+                        ServiceHoursStart                = '$(serviceHoursStart)'
+                        ServiceHoursEnd                  = '$(serviceHoursEnd)'
+                        ServiceHoursTimeZone              = '$(serviceHoursTimeZone)'
                         HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
                         DenySettingsMode                 = 'denyDelete'
                         ActionOnUnmanage                 = 'deleteResources'
