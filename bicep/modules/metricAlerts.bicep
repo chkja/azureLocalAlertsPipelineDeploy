@@ -16,6 +16,9 @@ param actionGroupId string
 @description('Include CPU / Memory capacity alerts. Basic = false (health-only). Advanced/Premium = true.')
 param includeCapacityMetrics bool = false
 
+@description('Include Network In/Out throughput alerts (Advanced/Premium only - defaults are very high and less universally useful than the other capacity metrics).')
+param includeNetworkMetrics bool = false
+
 @description('Evaluation frequency, ISO 8601 duration, e.g. PT5M.')
 param evaluationFrequency string = 'PT5M'
 
@@ -337,7 +340,7 @@ resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = 
   }
 }
 
-resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
   name: 'alert-${clusterName}-network-in-high'
   location: location
   properties: {
@@ -373,7 +376,7 @@ resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (inclu
   }
 }
 
-resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
   name: 'alert-${clusterName}-network-out-high'
   location: location
   properties: {
@@ -416,5 +419,5 @@ output storageCapacityAlertId string = includeCapacityMetrics ? storageCapacityA
 output memoryAvailableBytesAlertId string = includeCapacityMetrics ? memoryAvailableBytesAlert.id : ''
 output volumeLatencyReadAlertId string = includeCapacityMetrics ? volumeLatencyReadAlert.id : ''
 output volumeLatencyWriteAlertId string = includeCapacityMetrics ? volumeLatencyWriteAlert.id : ''
-output networkInAlertId string = includeCapacityMetrics ? networkInAlert.id : ''
-output networkOutAlertId string = includeCapacityMetrics ? networkOutAlert.id : ''
+output networkInAlertId string = includeNetworkMetrics ? networkInAlert.id : ''
+output networkOutAlertId string = includeNetworkMetrics ? networkOutAlert.id : ''

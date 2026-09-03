@@ -81,7 +81,12 @@ module metricAlerts 'metricAlerts.bicep' = {
     clusterResourceId: clusterResourceId
     location: location
     actionGroupId: actionGroup.outputs.actionGroupId
-    includeCapacityMetrics: isAdvancedOrPremium
+    // CPU / memory / volume-capacity metric alerts are pure metric alerts (no Log Analytics
+    // dependency), so per the service description ("Basic level is only using metric alert")
+    // they are included from Basic upward. Network in/out defaults are very high and less
+    // universally useful, so they stay gated to Advanced/Premium.
+    includeCapacityMetrics: true
+    includeNetworkMetrics: isAdvancedOrPremium
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize
     severityHealth: severityHealth

@@ -28,14 +28,14 @@ volume health events, and (Premium) proactive anomaly detection.
 | Alert | Type | Basic | Advanced | Premium | Source |
 |---|---|:---:|:---:|:---:|---|
 | Storage degraded (failed/missing drives) | Metric | ✅ | ✅ | ✅ | `Microsoft.AzureStackHCI/clusters` metric `Cluster Node Storage Degraded` |
-| CPU usage high | Metric | ❌ | ✅ | ✅ | metric `Hyper-V Hypervisor Logical Processor\% Total Run Time` (MS-recommended: >80%; default here: 85%) |
-| Memory usage high (%) | Metric | ❌ | ✅ | ✅ | metric `ClusterNode Memory Usage` |
-| Available memory low (bytes) | Metric | ❌ | ✅ | ✅ | metric `Memory\Available Bytes` - MS-recommended alert, < 1 GiB |
-| Volume read latency high | Metric | ❌ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Read` - MS-recommended alert, > 500 ms |
-| Volume write latency high | Metric | ❌ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Write` - MS-recommended alert, > 500 ms |
+| CPU usage high | Metric | ✅ | ✅ | ✅ | metric `Hyper-V Hypervisor Logical Processor\% Total Run Time` (MS-recommended: >80%; default here: 85%) |
+| Memory usage high (%) | Metric | ✅ | ✅ | ✅ | metric `ClusterNode Memory Usage` |
+| Available memory low (bytes) | Metric | ✅ | ✅ | ✅ | metric `Memory\Available Bytes` - MS-recommended alert, < 1 GiB |
+| Volume read latency high | Metric | ✅ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Read` - MS-recommended alert, > 500 ms |
+| Volume write latency high | Metric | ✅ | ✅ | ✅ | metric `Cluster CSVFS\Avg. sec/Write` - MS-recommended alert, > 500 ms |
 | Network inbound throughput high | Metric | ❌ | ✅ | ✅ | metric `Network Adapter\Bytes Received/sec` - MS-recommended alert, > 500 GB/s |
 | Network outbound throughput high | Metric | ❌ | ✅ | ✅ | metric `Network Adapter\Bytes Sent/sec` - MS-recommended alert, > 200 GB/s |
-| Storage capacity low (per volume) | Metric | ❌ | ✅ | ✅ | metric `Volume Size Available` (dimension-split by `LUN`), absolute bytes threshold |
+| Storage capacity low (per volume) | Metric | ✅ | ✅ | ✅ | metric `Volume Size Available` (dimension-split by `LUN`), absolute bytes threshold |
 | Node heartbeat missing (unreachable node) | Log | ❌ | ✅ | ✅ | `Heartbeat` table, KQL |
 | Volume health degraded | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational` + `Microsoft-Windows-SDDC-Management/Operational`), KQL |
 | Elevated Error-event rate (proactive) | Log | ❌ | ❌ | ✅ | `Event` table, KQL |
@@ -44,14 +44,18 @@ volume health events, and (Premium) proactive anomaly detection.
 
 This directly maps to the service description:
 - **Basic**: "Baseline monitoring of cluster availability and health signals (only alerts from
-  cluster health)" → storage-degraded metric alert only.
+  cluster health)" and "only using metric alert" → storage-degraded, CPU, memory (% and bytes),
+  and volume capacity/latency metric alerts, all with no Log Analytics dependency. Network
+  in/out are excluded at Basic - their MS-recommended defaults are very high and require
+  per-environment tuning, so they are held back to Advanced/Premium alongside the log alerts.
 - **Advanced**: "Monitoring of core Azure Local data sources... via Log Analytics log collection",
-  "Monitor capacity (CPU, memory and storage)" → adds CPU/memory/storage-capacity metric alerts +
-  heartbeat/volume health log alerts.
+  "Monitor capacity (CPU, memory and storage)" → adds network in/out metric alerts +
+  heartbeat/volume health log alerts on top of the Basic metric set.
 - **Premium**: "Full enablement and tuning of Azure Local Insights..." and "24/7 alert response...
   under SLA" → adds the enhanced proactive log alert, subscription-wide Activity Log alerts
   (Resource Health + Service Health) as a platform-health safety net, and (operationally) a second
   notification receiver representing the on-call rotation.
+
 
 > **Premium-only Activity Log alerts are deliberately subscription-wide, not cluster-scoped.**
 > `Microsoft.Insights/activityLogAlerts` must be deployed inside a resource group (an ARM
@@ -97,8 +101,10 @@ This directly maps to the service description:
 bicep/main.bicep                     (subscription scope, optional RG creation)
   └─ bicep/modules/alerts.bicep      (resource-group scope orchestrator, tier gating)
        ├─ modules/actionGroup.bicep       (email + webhook receivers)
-       ├─ modules/metricAlerts.bicep      (storage-degraded always; CPU/Memory/storage-capacity/
-       │                                   latency/network if Advanced/Premium)
+       ├─ modules/metricAlerts.bicep      (storage-degraded, CPU, memory %/bytes, and volume
+       │                                   capacity/latency in ALL tiers - pure metric alerts,
+       │                                   no Log Analytics dependency; network in/out added
+       │                                   only if Advanced/Premium)
        ├─ modules/logAlerts.bicep         (heartbeat + volume-health if Advanced/Premium; error-rate if Premium)
        ├─ modules/activityLogAlerts.bicep (Premium only - subscription-wide Resource/Service Health)
        └─ modules/suppressionRules.bicep  (all tiers - maintenance-window suppression rules)
@@ -130,6 +136,16 @@ Instead of a plain `az deployment sub create`, `scripts/Deploy-AzureLocalAlerts.
 One deployment stack is created per resource group, named `stack-azurelocal-alerts-<rg-name>` by
 default (override with `-DeploymentStackName`). Re-running the pipeline updates the existing
 stack in place.
+
+### Log Analytics workspace pre-flight check (Advanced/Premium)
+
+Before submitting the deployment, `Deploy-AzureLocalAlerts.ps1` calls `az resource show --ids
+<LogAnalyticsWorkspaceResourceId>` to confirm the workspace actually exists and is reachable. This
+matters because a `Microsoft.Insights/scheduledQueryRules` (log alert) resource deploys
+**successfully** even when it points at a workspace ID that is misspelled or no longer exists - it
+just silently never retrieves data, which otherwise surfaces later as "why did this alert never
+fire" rather than as a deployment failure. The check fails fast, before any ARM call, with a clear
+error identifying the bad workspace ID.
 
 ### Config-as-code / drift prevention
 
