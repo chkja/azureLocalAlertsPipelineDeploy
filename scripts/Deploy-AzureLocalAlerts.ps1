@@ -145,7 +145,7 @@
       -EmailReceiversJson '[{"name":"ops","emailAddress":"ops@example.com"}]' `
       -WebhookReceiversJson '[{"name":"itsm","serviceUri":"https://example.com/webhook"}]'
 #>
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SubscriptionId,
