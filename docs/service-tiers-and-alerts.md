@@ -111,8 +111,8 @@ This directly maps to the service description:
 > Prerequisites in the service description). **If you consolidate multiple clusters' Insights data
 > into one shared workspace**, you must add your own node-name-based scoping filter to these
 > queries using each cluster's actual Arc machine names (discover them with
-> `Get-AzureLocalAlertExploration.ps1` section 5/9, or `az resource list --resource-type
-> Microsoft.HybridCompute/machines`) - do not reuse the removed `clusterName`-based filter. The
+> `az resource list --resource-type Microsoft.HybridCompute/machines --resource-group <rg>
+> --query "[].name"`) - do not reuse the removed `clusterName`-based filter. The
 > one exception, `volumeHealthAlert`, correctly scopes per-cluster already: it cross-references
 > `Microsoft-Windows-SDDC-Management` EventID 3002's `ArmId` field, which genuinely equals
 > `clusterResourceId`.
@@ -392,7 +392,7 @@ continuous stream, so in practice they behave similarly to a stateful alert with
 ## 4. Exploration commands - confirm signals before tuning thresholds
 
 Run these against a live cluster/workspace before relying on the default thresholds in
-`pipeline/environments/*.bicepparam`. A wrapper script is provided: `scripts/Get-AzureLocalAlertExploration.ps1`.
+`pipeline/environments/*.bicepparam`.
 
 ### Metrics (works for all tiers - no Log Analytics required)
 

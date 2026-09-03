@@ -16,20 +16,13 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/metricAlerts.bicep` | Platform metric alerts (storage degraded, CPU, memory) |
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
-| `scripts/Get-AzureLocalAlertExploration.ps1` | Read-only exploration of metrics/tables against a live cluster |
 | `pipeline/azure-pipelines.yml` | Azure DevOps CD pipeline |
 | `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. |
 | `pipeline/environments/*.yml` | Per-tenant/cluster pipeline metadata only: service connection, subscription ID, DCR resource ID, and a pointer to the companion `.bicepparam` file |
 
 ## Quick start
 
-1. **Explore your environment first** (optional but recommended):
-   ```powershell
-   pwsh -File scripts/Get-AzureLocalAlertExploration.ps1 `
-     -ClusterResourceId "/subscriptions/.../providers/Microsoft.AzureStackHCI/clusters/<name>" `
-     -LogAnalyticsWorkspaceId "<workspace-guid>"   # omit for Basic tier
-   ```
-2. **Deploy locally** for a quick test (creates/updates an Azure Deployment Stack with
+1. **Deploy locally** for a quick test (creates/updates an Azure Deployment Stack with
    `--deny-settings-mode denyDelete`, so managed resources can't be deleted outside the stack).
    Two ways to pass parameters:
    - **`.bicepparam` file** (recommended - same file the pipeline uses):
@@ -58,7 +51,7 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
        -WhatIf   # drop this switch to actually deploy (runs `az stack sub validate` vs `create`)
      ```
    The resource group is always created/ensured as part of this deployment (no separate toggle).
-3. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.bicepparam` (tier,
+2. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.bicepparam` (tier,
    thresholds, receivers, resource IDs) and `example-customera-basic.yml` (service connection,
    subscription ID, DCR resource ID) to a new pair of files named after your customer/cluster, fill
    in both, add the base file name to the `environmentFile` parameter list in
