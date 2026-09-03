@@ -83,7 +83,7 @@ var effectiveAutoMitigate = useMuteActionsDuration ? false : autoMitigate
 // Advanced + Premium: node heartbeat / connectivity loss
 // ---------------------------------------------------------------------------
 resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-node-heartbeat-missing'
+  name: 'insqr-${clusterName}-node-heartbeat-missing'
   location: location
   properties: {
     displayName: 'Azure Local - Node heartbeat missing (${clusterName})'
@@ -125,7 +125,7 @@ resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-p
 // https://chkja.dk/blog/azure-local-insights-part2-logalert
 // ---------------------------------------------------------------------------
 resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-volume-health'
+  name: 'insqr-${clusterName}-volume-health'
   location: location
   properties: {
     displayName: 'Azure Local - Volume health degraded (${clusterName})'
@@ -168,7 +168,7 @@ resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
 // see docs/service-tiers-and-alerts.md "Exploration commands" section.
 // ---------------------------------------------------------------------------
 resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = if (includePremiumAlerts) {
-  name: 'alert-${clusterName}-error-event-rate'
+  name: 'insqr-${clusterName}-error-event-rate'
   location: location
   properties: {
     displayName: 'Azure Local - Elevated Error event rate (${clusterName})'
@@ -214,7 +214,7 @@ resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
 // https://learn.microsoft.com/azure/azure-local/manage/health-service-faults
 // ---------------------------------------------------------------------------
 resource generalHealthFaultAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-general-health-fault'
+  name: 'insqr-${clusterName}-general-health-fault'
   location: location
   properties: {
     displayName: 'Azure Local - Health Service fault detected (${clusterName})'
@@ -260,7 +260,7 @@ resource generalHealthFaultAlert 'Microsoft.Insights/scheduledQueryRules@2023-03
 // docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
 // ---------------------------------------------------------------------------
 resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-quorum-node-isolation'
+  name: 'insqr-${clusterName}-quorum-node-isolation'
   location: location
   properties: {
     displayName: 'Azure Local - Cluster quorum loss or node isolation (${clusterName})'
@@ -308,7 +308,7 @@ resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@202
 // TIP: verify criticalServiceNames matches your nodes' exact DisplayName - see param description.
 // ---------------------------------------------------------------------------
 resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-critical-service-down'
+  name: 'insqr-${clusterName}-critical-service-down'
   location: location
   properties: {
     displayName: 'Azure Local - Critical platform service down (${clusterName})'
@@ -353,7 +353,7 @@ resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-0
 // Insights DCR. See docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
 // ---------------------------------------------------------------------------
 resource hyperVAvailabilityAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'alert-${clusterName}-hyperv-availability'
+  name: 'insqr-${clusterName}-hyperv-availability'
   location: location
   properties: {
     displayName: 'Azure Local - Hyper-V VM availability issue (${clusterName})'

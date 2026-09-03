@@ -53,7 +53,7 @@ var commonSchedule = {
 // 1. Every weekday evening through the following morning's service-hours start (crosses
 //    midnight). Covers Mon 17:00->Tue 07:00 ... Fri 17:00->Sat 07:00 (using the default hours).
 resource weekdayEveningToMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
-  name: 'suppress-${clusterName}-offhours-weekday-evening'
+  name: 'apr-${clusterName}-offhours-weekday-evening'
   location: 'global'
   properties: {
     description: 'Standing off-hours suppression: every weekday evening (after ${serviceHoursEnd}) through the following morning (${serviceHoursStart}).'
@@ -86,7 +86,7 @@ resource weekdayEveningToMorning 'Microsoft.AlertsManagement/actionRules@2021-08
 // 2. Monday early morning, before service-hours start - not covered by #1 because Sunday is not
 //    in its daysOfWeek list, so the crossing-midnight window never fires into Monday.
 resource mondayEarlyMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
-  name: 'suppress-${clusterName}-offhours-monday-morning'
+  name: 'apr-${clusterName}-offhours-monday-morning'
   location: 'global'
   properties: {
     description: 'Standing off-hours suppression: Monday from midnight until service-hours start (${serviceHoursStart}).'
@@ -114,7 +114,7 @@ resource mondayEarlyMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' 
 
 // 3. Saturday, all day.
 resource saturdayAllDay 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
-  name: 'suppress-${clusterName}-offhours-saturday'
+  name: 'apr-${clusterName}-offhours-saturday'
   location: 'global'
   properties: {
     description: 'Standing off-hours suppression: all day Saturday (non-working day).'
@@ -142,7 +142,7 @@ resource saturdayAllDay 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
 
 // 4. Sunday, all day.
 resource sundayAllDay 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
-  name: 'suppress-${clusterName}-offhours-sunday'
+  name: 'apr-${clusterName}-offhours-sunday'
   location: 'global'
   properties: {
     description: 'Standing off-hours suppression: all day Sunday (non-working day).'

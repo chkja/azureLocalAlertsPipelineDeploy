@@ -41,7 +41,7 @@ var clusterName = last(split(clusterResourceId, '/'))
 var ruleScopes = concat([clusterResourceId], additionalScopes)
 
 resource suppressionRules 'Microsoft.AlertsManagement/actionRules@2021-08-08' = [for window in suppressionWindows: {
-  name: 'suppress-${clusterName}-${window.name}'
+  name: 'apr-${clusterName}-${window.name}'
   location: 'global'
   properties: {
     description: window.?description ?? 'Maintenance-window suppression rule "${window.name}" for ${clusterResourceId}.'

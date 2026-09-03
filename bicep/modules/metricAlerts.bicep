@@ -64,7 +64,7 @@ var clusterName = last(split(clusterResourceId, '/'))
 // Basic + Advanced + Premium: baseline cluster health / storage degradation
 // ---------------------------------------------------------------------------
 resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: 'alert-${clusterName}-storage-degraded'
+  name: 'inma-${clusterName}-storage-degraded'
   location: location
   properties: {
     description: 'Fires when one or more physical drives in the storage pool are missing or have failed. Baseline cluster health signal - available in all service tiers.'
@@ -102,7 +102,7 @@ resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
 // Advanced + Premium only: capacity monitoring (CPU / Memory)
 // ---------------------------------------------------------------------------
 resource cpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-cpu-high'
+  name: 'inma-${clusterName}-cpu-high'
   location: location
   properties: {
     description: 'Fires when average cluster node CPU usage exceeds ${cpuThresholdPercent}% for the evaluation window.'
@@ -137,7 +137,7 @@ resource cpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapa
 }
 
 resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-memory-high'
+  name: 'inma-${clusterName}-memory-high'
   location: location
   properties: {
     description: 'Fires when average cluster node memory usage exceeds ${memoryThresholdPercent}% for the evaluation window.'
@@ -178,7 +178,7 @@ resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeC
 // per volume rather than only on a cluster-wide aggregate.
 // ---------------------------------------------------------------------------
 resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-storage-capacity-low'
+  name: 'inma-${clusterName}-storage-capacity-low'
   location: location
   properties: {
     description: 'Fires when a volume\'s available space drops below ${storageFreeBytesThreshold} bytes for the evaluation window. Threshold is absolute bytes - see param description for why (no ratio metric is available).'
@@ -229,7 +229,7 @@ resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if 
 // cluster-wide aggregates (no dimension splitting), matching Microsoft's out-of-the-box defaults.
 // ---------------------------------------------------------------------------
 resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-memory-available-bytes-low'
+  name: 'inma-${clusterName}-memory-available-bytes-low'
   location: location
   properties: {
     description: 'Fires when available memory drops below ${memoryAvailableBytesThreshold} bytes for the evaluation window. Microsoft-recommended alert (metric "Memory\\Available Bytes"), complementary to the percentage-based memory alert.'
@@ -264,7 +264,7 @@ resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' 
 }
 
 resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-volume-latency-read-high'
+  name: 'inma-${clusterName}-volume-latency-read-high'
   location: location
   properties: {
     description: 'Fires when average volume read latency exceeds ${volumeLatencyReadThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Read"; documented default: 500 ms).'
@@ -299,7 +299,7 @@ resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = i
 }
 
 resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'alert-${clusterName}-volume-latency-write-high'
+  name: 'inma-${clusterName}-volume-latency-write-high'
   location: location
   properties: {
     description: 'Fires when average volume write latency exceeds ${volumeLatencyWriteThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Write"; documented default: 500 ms).'
@@ -334,7 +334,7 @@ resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = 
 }
 
 resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
-  name: 'alert-${clusterName}-network-in-high'
+  name: 'inma-${clusterName}-network-in-high'
   location: location
   properties: {
     description: 'Fires when inbound network throughput exceeds ${networkInThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Received/sec"; documented default: 500 GB/s).'
@@ -369,7 +369,7 @@ resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (inclu
 }
 
 resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
-  name: 'alert-${clusterName}-network-out-high'
+  name: 'inma-${clusterName}-network-out-high'
   location: location
   properties: {
     description: 'Fires when outbound network throughput exceeds ${networkOutThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Sent/sec"; documented default: 200 GB/s).'
