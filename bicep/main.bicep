@@ -50,6 +50,9 @@ param cpuThresholdPercent int = 85
 @description('Memory usage percent threshold for the capacity alert (Advanced/Premium only).')
 param memoryThresholdPercent int = 85
 
+@description('Available volume space (bytes) below which a storage-capacity alert fires (Advanced/Premium only). Absolute bytes, not percent - tune per environment. Default: 200 GiB.')
+param storageFreeBytesThreshold int = 214748364800
+
 @description('Minutes without a Heartbeat before a node is considered unreachable (Advanced/Premium only).')
 param heartbeatMissingMinutes int = 10
 
@@ -87,6 +90,7 @@ module alerts 'modules/alerts.bicep' = {
     webhookReceivers: webhookReceivers
     cpuThresholdPercent: cpuThresholdPercent
     memoryThresholdPercent: memoryThresholdPercent
+    storageFreeBytesThreshold: storageFreeBytesThreshold
     heartbeatMissingMinutes: heartbeatMissingMinutes
     evaluationFrequency: evaluationFrequency
     windowSize: windowSize

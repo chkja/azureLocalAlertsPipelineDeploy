@@ -30,6 +30,7 @@ volume health events, and (Premium) proactive anomaly detection.
 | Storage degraded (failed/missing drives) | Metric | ✅ | ✅ | ✅ | `Microsoft.AzureStackHCI/clusters` metric `Cluster Node Storage Degraded` |
 | CPU usage high | Metric | ❌ | ✅ | ✅ | metric `Hyper-V Hypervisor Logical Processor\% Total Run Time` |
 | Memory usage high | Metric | ❌ | ✅ | ✅ | metric `ClusterNode Memory Usage` |
+| Storage capacity low (per volume) | Metric | ❌ | ✅ | ✅ | metric `Volume Size Available` (dimension-split by `LUN`), absolute bytes threshold |
 | Node heartbeat missing (unreachable node) | Log | ❌ | ✅ | ✅ | `Heartbeat` table, KQL |
 | Volume health degraded | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational` + `Microsoft-Windows-SDDC-Management/Operational`), KQL |
 | Elevated Error-event rate (proactive) | Log | ❌ | ❌ | ✅ | `Event` table, KQL |
@@ -38,16 +39,26 @@ This directly maps to the service description:
 - **Basic**: "Baseline monitoring of cluster availability and health signals (only alerts from
   cluster health)" → storage-degraded metric alert only.
 - **Advanced**: "Monitoring of core Azure Local data sources... via Log Analytics log collection",
-  "Monitor capacity (CPU, memory and storage)" → adds CPU/memory metric alerts + heartbeat/volume
-  health log alerts.
+  "Monitor capacity (CPU, memory and storage)" → adds CPU/memory/storage-capacity metric alerts +
+  heartbeat/volume health log alerts.
 - **Premium**: "Full enablement and tuning of Azure Local Insights..." and "24/7 alert response...
   under SLA" → adds the enhanced proactive log alert and (operationally) a second notification
   receiver representing the on-call rotation.
 
-> Storage **capacity** alerting (as opposed to storage **health**) is intentionally left as a
-> tuning exercise per environment - see section 4 - because the exact Perf `CounterName` used for
-> volume free-space percentage should be confirmed against your workspace before wiring a
-> threshold (unlike CPU/Memory %, which are documented, stable platform metric names).
+> **Storage capacity alerting uses an absolute-bytes threshold, not a percentage.** Azure Monitor
+> metric alerts cannot compute a ratio between two metrics (e.g. `Available / Total`), so the
+> `storageCapacityAlert` rule fires when the platform metric `Volume Size Available` drops below
+> `storageFreeBytesThreshold` (default: 214748364800 bytes = 200 GiB) for any volume. The rule is
+> **dimension-split on `LUN`**, meaning Azure evaluates and can alert per-volume rather than only
+> as a cluster-wide aggregate - each volume below the threshold fires its own alert instance.
+> Because "200 GiB free" means something very different on a 2 TiB volume vs a 20 TiB volume,
+> **tune `storageFreeBytesThreshold` per environment** using the live `Volume Size Total` values
+> for your cluster - see section 4 for the exploration command. This is a deliberate trade-off:
+> the underlying Log Analytics `Perf` table on the tested cluster only carried
+> Memory/Network/Processor counters (no disk/volume capacity counters), so a log-based
+> percentage alert was not viable; the metric-based absolute-bytes alert was used instead because
+> `Volume Size Available` / `Volume Size Total` / `Physicaldisk Capacity Size Total`/`Used` are
+> confirmed, documented platform metrics available even without Log Analytics.
 
 ## 3. Deployment model
 
@@ -55,7 +66,7 @@ This directly maps to the service description:
 bicep/main.bicep                     (subscription scope, optional RG creation)
   └─ bicep/modules/alerts.bicep      (resource-group scope orchestrator, tier gating)
        ├─ modules/actionGroup.bicep  (email + webhook receivers)
-       ├─ modules/metricAlerts.bicep (storage-degraded always; CPU/Memory if Advanced/Premium)
+       ├─ modules/metricAlerts.bicep (storage-degraded always; CPU/Memory/storage-capacity if Advanced/Premium)
        └─ modules/logAlerts.bicep    (heartbeat + volume-health if Advanced/Premium; error-rate if Premium)
 ```
 
@@ -119,12 +130,16 @@ az monitor metrics list-definitions \
   --resource "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.AzureStackHCI/clusters/<name>" \
   --output table
 
-# Pull current values for the 3 metrics used in this repo's alert rules
+# Pull current values for the metrics used in this repo's alert rules
 az monitor metrics list \
   --resource "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.AzureStackHCI/clusters/<name>" \
-  --metric "Cluster Node Storage Degraded,Hyper-V Hypervisor Logical Processor\% Total Run Time,ClusterNode Memory Usage" \
+  --metric "Cluster Node Storage Degraded,Hyper-V Hypervisor Logical Processor\% Total Run Time,ClusterNode Memory Usage,Volume Size Available,Volume Size Total" \
   --interval PT1H --output table
 ```
+
+> Use `Volume Size Available` and `Volume Size Total` per-volume (dimension `LUN`) to pick a
+> realistic `storageFreeBytesThreshold` for the cluster - e.g. ~10-15% of `Volume Size Total`
+> rather than the generic 200 GiB default.
 
 ### Log Analytics (Advanced/Premium only)
 
@@ -176,10 +191,11 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | Parameter | Default | Notes |
 |---|---|---|
 | `severityHealth` | 1 (Error) | Storage degraded, node heartbeat, volume health |
-| `severityCapacity` | 2 (Warning) | CPU / Memory |
+| `severityCapacity` | 2 (Warning) | CPU / Memory / storage capacity |
 | `severityPremium` | 2 (Warning) | Error-event rate |
 | `cpuThresholdPercent` | 85 | Tune per cluster workload profile |
 | `memoryThresholdPercent` | 85 | Tune per cluster workload profile |
+| `storageFreeBytesThreshold` | 214748364800 (200 GiB) | Absolute bytes, per volume (dimension `LUN`) - tune against `Volume Size Total` |
 | `heartbeatMissingMinutes` | 10 | Node considered unreachable |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 

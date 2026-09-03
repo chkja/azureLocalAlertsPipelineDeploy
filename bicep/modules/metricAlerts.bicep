@@ -34,6 +34,9 @@ param cpuThresholdPercent int = 85
 @description('Memory usage percent threshold that triggers an alert.')
 param memoryThresholdPercent int = 85
 
+@description('Available volume space (bytes) below which a storage-capacity alert fires. Confirmed on a live cluster via the "Volume Size Available" platform metric (REST name "volume size available"). This is an absolute-bytes threshold, not a percentage - Azure Monitor metric alerts cannot compute a ratio between two metrics (Available/Total), so tune this per environment using the actual "Volume Size Total" values for your volumes (see scripts/Get-AzureLocalAlertExploration.ps1, section 1/2). Default: 200 GiB.')
+param storageFreeBytesThreshold int = 214748364800
+
 @description('Whether alerts auto-resolve when the condition clears.')
 param autoMitigate bool = true
 
@@ -153,6 +156,58 @@ resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeC
   }
 }
 
+// ---------------------------------------------------------------------------
+// Advanced + Premium only: storage capacity (per-volume, via dimension splitting on LUN)
+// Confirmed live on a real cluster: "Volume Size Available" (REST name "volume size available")
+// is exposed as a platform metric with LUN as a dimension, so this alert fires independently
+// per volume rather than only on a cluster-wide aggregate.
+// ---------------------------------------------------------------------------
+resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
+  name: 'alert-${clusterName}-storage-capacity-low'
+  location: location
+  properties: {
+    description: 'Fires when a volume\'s available space drops below ${storageFreeBytesThreshold} bytes for the evaluation window. Threshold is absolute bytes - see param description for why (no ratio metric is available).'
+    severity: severityCapacity
+    enabled: true
+    scopes: [
+      clusterResourceId
+    ]
+    evaluationFrequency: evaluationFrequency
+    windowSize: windowSize
+    targetResourceType: 'Microsoft.AzureStackHCI/clusters'
+    autoMitigate: autoMitigate
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'LowStorageCapacity'
+          metricName: 'volume size available'
+          metricNamespace: 'Microsoft.AzureStackHCI/clusters'
+          operator: 'LessThan'
+          threshold: storageFreeBytesThreshold
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+          dimensions: [
+            {
+              name: 'LUN'
+              operator: 'Include'
+              values: [
+                '*'
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroupId
+      }
+    ]
+  }
+}
+
 output storageDegradedAlertId string = storageDegradedAlert.id
 output cpuAlertId string = includeCapacityMetrics ? cpuAlert.id : ''
 output memoryAlertId string = includeCapacityMetrics ? memoryAlert.id : ''
+output storageCapacityAlertId string = includeCapacityMetrics ? storageCapacityAlert.id : ''

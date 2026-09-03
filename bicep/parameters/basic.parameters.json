@@ -47,6 +47,9 @@
     "memoryThresholdPercent": {
       "value": 85
     },
+    "storageFreeBytesThreshold": {
+      "value": 214748364800
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

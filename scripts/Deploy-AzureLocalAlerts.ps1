@@ -124,6 +124,9 @@ param(
     [int]$MemoryThresholdPercent = 85,
 
     [Parameter(Mandatory = $false)]
+    [long]$StorageFreeBytesThreshold = 214748364800,
+
+    [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
 
     [Parameter(Mandatory = $false)]
@@ -211,6 +214,7 @@ $templateParameters = @(
     "webhookReceivers=$webhookReceiversCompact",
     "cpuThresholdPercent=$CpuThresholdPercent",
     "memoryThresholdPercent=$MemoryThresholdPercent",
+    "storageFreeBytesThreshold=$StorageFreeBytesThreshold",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 

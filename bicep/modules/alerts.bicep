@@ -32,6 +32,7 @@ param webhookReceivers array = []
 
 param cpuThresholdPercent int = 85
 param memoryThresholdPercent int = 85
+param storageFreeBytesThreshold int = 214748364800
 param heartbeatMissingMinutes int = 10
 param evaluationFrequency string = 'PT5M'
 param windowSize string = 'PT15M'
@@ -70,6 +71,7 @@ module metricAlerts 'metricAlerts.bicep' = {
     severityCapacity: severityCapacity
     cpuThresholdPercent: cpuThresholdPercent
     memoryThresholdPercent: memoryThresholdPercent
+    storageFreeBytesThreshold: storageFreeBytesThreshold
   }
 }
 

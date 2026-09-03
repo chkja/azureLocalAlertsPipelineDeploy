@@ -36,4 +36,5 @@ variables:
 
   cpuThresholdPercent: '85'
   memoryThresholdPercent: '85'
+  storageFreeBytesThreshold: '214748364800'
   heartbeatMissingMinutes: '10'
