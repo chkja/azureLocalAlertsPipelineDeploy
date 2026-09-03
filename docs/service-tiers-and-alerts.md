@@ -39,6 +39,8 @@ volume health events, and (Premium) proactive anomaly detection.
 | Node heartbeat missing (unreachable node) | Log | ❌ | ✅ | ✅ | `Heartbeat` table, KQL |
 | Volume health degraded | Log | ❌ | ✅ | ✅ | `Event` table (`Microsoft-Windows-Health/Operational` + `Microsoft-Windows-SDDC-Management/Operational`), KQL |
 | Elevated Error-event rate (proactive) | Log | ❌ | ❌ | ✅ | `Event` table, KQL |
+| Subscription-wide Resource Health degraded/unavailable | Activity Log | ❌ | ❌ | ✅ | `Microsoft.Insights/activityLogAlerts`, category `ResourceHealth`, scoped to the whole subscription |
+| Subscription-wide Service Health events | Activity Log | ❌ | ❌ | ✅ | `Microsoft.Insights/activityLogAlerts`, category `ServiceHealth` (toggle: `includeServiceHealth`) |
 
 This directly maps to the service description:
 - **Basic**: "Baseline monitoring of cluster availability and health signals (only alerts from
@@ -47,8 +49,20 @@ This directly maps to the service description:
   "Monitor capacity (CPU, memory and storage)" → adds CPU/memory/storage-capacity metric alerts +
   heartbeat/volume health log alerts.
 - **Premium**: "Full enablement and tuning of Azure Local Insights..." and "24/7 alert response...
-  under SLA" → adds the enhanced proactive log alert and (operationally) a second notification
-  receiver representing the on-call rotation.
+  under SLA" → adds the enhanced proactive log alert, subscription-wide Activity Log alerts
+  (Resource Health + Service Health) as a platform-health safety net, and (operationally) a second
+  notification receiver representing the on-call rotation.
+
+> **Premium-only Activity Log alerts are deliberately subscription-wide, not cluster-scoped.**
+> `Microsoft.Insights/activityLogAlerts` must be deployed inside a resource group (an ARM
+> requirement for the resource type), but its own `scopes` property is set to `subscription().id`
+> so it catches ANY resource in the subscription reporting a Resource Health issue via the
+> Activity Log - not just the monitored cluster. This matches the Premium tier's "full incident
+> lifecycle ownership" and 24/7 SLA commitments: platform/hardware issues (e.g. underlying host,
+> storage fabric, or connectivity problems reported by the Azure platform itself) are caught even
+> if they haven't yet surfaced as a cluster-specific metric/log alert. Set `includeServiceHealth:
+> false` to opt out of the companion Service Health alert (planned maintenance/service
+> issues/security advisories) if it's already covered by a separate subscription-wide alert.
 
 > **Storage capacity alerting uses an absolute-bytes threshold, not a percentage.** Azure Monitor
 > metric alerts cannot compute a ratio between two metrics (e.g. `Available / Total`), so the
@@ -82,9 +96,12 @@ This directly maps to the service description:
 ```
 bicep/main.bicep                     (subscription scope, optional RG creation)
   └─ bicep/modules/alerts.bicep      (resource-group scope orchestrator, tier gating)
-       ├─ modules/actionGroup.bicep  (email + webhook receivers)
-       ├─ modules/metricAlerts.bicep (storage-degraded always; CPU/Memory/storage-capacity if Advanced/Premium)
-       └─ modules/logAlerts.bicep    (heartbeat + volume-health if Advanced/Premium; error-rate if Premium)
+       ├─ modules/actionGroup.bicep       (email + webhook receivers)
+       ├─ modules/metricAlerts.bicep      (storage-degraded always; CPU/Memory/storage-capacity/
+       │                                   latency/network if Advanced/Premium)
+       ├─ modules/logAlerts.bicep         (heartbeat + volume-health if Advanced/Premium; error-rate if Premium)
+       ├─ modules/activityLogAlerts.bicep (Premium only - subscription-wide Resource/Service Health)
+       └─ modules/suppressionRules.bicep  (all tiers - maintenance-window suppression rules)
 ```
 
 One Action Group per cluster is reused by every alert rule for that cluster, and supports both
@@ -133,6 +150,61 @@ To onboard a new cluster:
 
 To change tier or service connection **once** without touching git, use the `serviceTierOverride` /
 `serviceConnectionOverride` runtime parameters on a manual pipeline run.
+
+### Maintenance-window suppression rules (all tiers)
+
+Every tier supports **multiple suppression rules** (`Microsoft.AlertsManagement/actionRules`,
+type `Suppression`) via the `suppressionWindows` array parameter / `suppressionWindowsJson`
+pipeline variable. These quiet **notifications only** for a scheduled window - the underlying
+alert rules stay enabled and alerts still fire/show in the portal, they just don't page anyone -
+which avoids the configuration drift that comes from manually disabling/snoozing alerts in the
+portal during planned maintenance (e.g. the monthly Azure Local solution update, SBE firmware
+runs, or a customer-scheduled change window).
+
+Each array entry becomes one suppression rule. Supported `recurrenceType` values:
+
+| `recurrenceType` | Use case | Required fields |
+|---|---|---|
+| `None` | A single one-off window (e.g. a specific migration date) | `effectiveFrom`, `effectiveUntil` |
+| `Daily` | Every day, same time window | + `startTime`, `endTime` |
+| `Weekly` | Specific day(s) of the week | + `startTime`, `endTime`, `daysOfWeek` |
+| `Monthly` | Specific day(s) of the month | + `startTime`, `endTime`, `daysOfMonth` |
+
+Example - a recurring Saturday-night patch window plus a one-off migration window:
+
+```json
+[
+  {
+    "name": "monthly-patch-window",
+    "description": "Monthly Azure Local solution update window",
+    "effectiveFrom": "2026-01-01T00:00:00",
+    "effectiveUntil": "2027-01-01T00:00:00",
+    "timeZone": "UTC",
+    "recurrenceType": "Weekly",
+    "startTime": "22:00:00",
+    "endTime": "02:00:00",
+    "daysOfWeek": ["Saturday"]
+  },
+  {
+    "name": "one-time-migration",
+    "effectiveFrom": "2026-09-10T22:00:00",
+    "effectiveUntil": "2026-09-11T04:00:00",
+    "timeZone": "UTC",
+    "recurrenceType": "None"
+  }
+]
+```
+
+Set this as `suppressionWindowsJson` (compact JSON string) in a `pipeline/environments/<name>.yml`
+file, or as the `suppressionWindows` array parameter directly in a `bicep/parameters/*.json` file
+for a one-off manual deployment. `scripts/Deploy-AzureLocalAlerts.ps1` validates the shape up
+front (required fields per `recurrenceType`) before submitting the deployment, so a malformed
+window fails fast with a clear error instead of a deep ARM error.
+
+Suppression rules match on the resource ID(s) in `modules/suppressionRules.bicep`'s `scopes`
+(the cluster resource ID by default) - matching is based on the **affected resource** of the
+fired alert, not which alert rule created it, so a cluster-scoped suppression rule also silences
+the Premium subscription-wide Resource Health alert for that same cluster during the window.
 
 ## 4. Exploration commands - confirm signals before tuning thresholds
 
@@ -219,6 +291,8 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `networkInThresholdBytesPerSecond` | 500000000000 (500 GB/s) | MS-recommended default - very high, review per NIC speed |
 | `networkOutThresholdBytesPerSecond` | 200000000000 (200 GB/s) | MS-recommended default - very high, review per NIC speed |
 | `heartbeatMissingMinutes` | 10 | Node considered unreachable |
+| `includeServiceHealth` | `true` | Premium only - also deploy the subscription-wide Service Health activity log alert |
+| `suppressionWindows` | `[]` | All tiers - maintenance-window suppression rules, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
 All are Bicep parameters - override per environment in `bicep/parameters/*.json` or per pipeline

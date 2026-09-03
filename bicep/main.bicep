@@ -86,6 +86,16 @@ param severityCapacity int = 2
 @description('Severity for the Premium-only enhanced monitoring alert.')
 param severityPremium int = 2
 
+@description('Also alert on Azure Service Health events, subscription-wide (Premium tier only, ignored otherwise). Default: true.')
+param includeServiceHealth bool = true
+
+@description('''
+Array of maintenance-window suppression rule definitions, applied at every service tier. See
+modules/suppressionRules.bicep for the exact per-entry shape and docs/service-tiers-and-alerts.md
+for worked examples. Default: [] (no suppression rules).
+''')
+param suppressionWindows array = []
+
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
@@ -117,6 +127,8 @@ module alerts 'modules/alerts.bicep' = {
     severityHealth: severityHealth
     severityCapacity: severityCapacity
     severityPremium: severityPremium
+    includeServiceHealth: includeServiceHealth
+    suppressionWindows: suppressionWindows
   }
   dependsOn: [
     rg

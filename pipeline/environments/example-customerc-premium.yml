@@ -28,4 +28,8 @@ variables:
   volumeLatencyWriteThresholdSeconds: '0.5'
   networkInThresholdBytesPerSecond: '500000000000'
   networkOutThresholdBytesPerSecond: '200000000000'
+  includeServiceHealth: 'true'
+  # Example maintenance window (recurring, every Saturday 22:00-02:00 UTC) - uncomment/adapt to enable:
+  # suppressionWindowsJson: '[{"name":"monthly-patch-window","description":"Monthly Azure Local solution update window","effectiveFrom":"2026-01-01T00:00:00","effectiveUntil":"2027-01-01T00:00:00","timeZone":"UTC","recurrenceType":"Weekly","startTime":"22:00:00","endTime":"02:00:00","daysOfWeek":["Saturday"]}]'
+  suppressionWindowsJson: '[]'
   heartbeatMissingMinutes: '10'

@@ -42,4 +42,6 @@ variables:
   volumeLatencyWriteThresholdSeconds: '0.5'
   networkInThresholdBytesPerSecond: '500000000000'
   networkOutThresholdBytesPerSecond: '200000000000'
+  includeServiceHealth: 'true'
+  suppressionWindowsJson: '[]'
   heartbeatMissingMinutes: '10'

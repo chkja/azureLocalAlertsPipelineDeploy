@@ -45,6 +45,18 @@ param severityHealth int = 1
 param severityCapacity int = 2
 param severityPremium int = 2
 
+@description('Also alert on Azure Service Health events (Premium tier only, ignored otherwise). Default: true.')
+param includeServiceHealth bool = true
+
+@description('''
+Array of maintenance-window suppression rule definitions, applied at every service tier. Each
+entry creates one Suppression alert-processing rule that quiets action-group notifications for
+this cluster during the defined schedule, without disabling the underlying alert rules. See
+modules/suppressionRules.bicep for the exact per-entry shape, and docs/service-tiers-and-alerts.md
+for worked examples. Default: [] (no suppression rules).
+''')
+param suppressionWindows array = []
+
 var isAdvancedOrPremium = serviceTier == 'Advanced' || serviceTier == 'Premium'
 var isPremium = serviceTier == 'Premium'
 
@@ -99,6 +111,28 @@ module logAlerts 'logAlerts.bicep' = if (isAdvancedOrPremium) {
     severityStorage: severityHealth
     includePremiumAlerts: isPremium
     severityPremium: severityPremium
+  }
+}
+
+// Premium only: subscription-wide Resource Health / Service Health safety net (see module header
+// comment for rationale). Deployed inside this resource group (an ARM requirement for this
+// resource type), but its own `scopes` property targets the whole subscription.
+module activityLogAlerts 'activityLogAlerts.bicep' = if (isPremium) {
+  name: 'deploy-activity-log-alerts'
+  params: {
+    actionGroupId: actionGroup.outputs.actionGroupId
+    namePrefix: 'alert-sub-${last(split(clusterResourceId, '/'))}'
+    includeServiceHealth: includeServiceHealth
+  }
+}
+
+// All tiers: maintenance-window suppression rules. An empty suppressionWindows array (the
+// default) deploys zero rules - safe to always include this module.
+module suppressionRules 'suppressionRules.bicep' = {
+  name: 'deploy-suppression-rules'
+  params: {
+    clusterResourceId: clusterResourceId
+    suppressionWindows: suppressionWindows
   }
 }
 

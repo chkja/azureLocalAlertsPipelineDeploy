@@ -54,6 +54,17 @@
 .PARAMETER WebhookReceiversJson
     JSON array string: [{"name":"...", "serviceUri":"...", "useCommonAlertSchema":true}, ...]
 
+.PARAMETER IncludeServiceHealth
+    Premium tier only (ignored otherwise). Also deploys a subscription-wide Azure Service Health
+    activity log alert alongside the Resource Health one. Default $true.
+
+.PARAMETER SuppressionWindowsJson
+    JSON array string of maintenance-window suppression rule definitions, applied at every
+    service tier. Each entry: {"name":"...", "effectiveFrom":"2026-01-01T00:00:00",
+    "effectiveUntil":"2027-01-01T00:00:00", "timeZone":"UTC", "recurrenceType":"Weekly",
+    "startTime":"22:00:00", "endTime":"02:00:00", "daysOfWeek":["Saturday"]}. See
+    bicep/modules/suppressionRules.bicep for the full shape (recurrenceType None/Daily/Weekly/Monthly).
+
 .PARAMETER DeploymentStackName
     Name of the deployment stack resource. Defaults to "stack-azurelocal-alerts-<ResourceGroupName>".
     Re-running with the same name updates the existing stack; a different name creates a new one.
@@ -142,6 +153,12 @@ param(
     [long]$NetworkOutThresholdBytesPerSecond = 200000000000,
 
     [Parameter(Mandatory = $false)]
+    [bool]$IncludeServiceHealth = $true,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SuppressionWindowsJson = '[]',
+
+    [Parameter(Mandatory = $false)]
     [int]$HeartbeatMissingMinutes = 10,
 
     [Parameter(Mandatory = $false)]
@@ -174,6 +191,44 @@ function Assert-JsonArray {
     }
 }
 
+function Assert-SuppressionWindows {
+    <#
+        Validates -SuppressionWindowsJson up front (fails fast with a clear message instead of a
+        deep ARM/discriminated-union error), then returns the parsed array. Mirrors the shape
+        documented in bicep/modules/suppressionRules.bicep.
+    #>
+    param([string]$Json)
+
+    Assert-JsonArray -Value $Json -ParamName 'SuppressionWindowsJson'
+    $windows = @($Json | ConvertFrom-Json)
+
+    foreach ($w in $windows) {
+        foreach ($required in @('name', 'effectiveFrom', 'effectiveUntil', 'recurrenceType')) {
+            if (-not ($w.PSObject.Properties.Name -contains $required) -or [string]::IsNullOrWhiteSpace($w.$required)) {
+                throw "SuppressionWindowsJson entry is missing required property '$required': $($w | ConvertTo-Json -Compress)"
+            }
+        }
+        if ($w.recurrenceType -notin @('None', 'Daily', 'Weekly', 'Monthly')) {
+            throw "SuppressionWindowsJson entry '$($w.name)' has invalid recurrenceType '$($w.recurrenceType)' - must be None, Daily, Weekly, or Monthly."
+        }
+        if ($w.recurrenceType -ne 'None') {
+            foreach ($required in @('startTime', 'endTime')) {
+                if (-not ($w.PSObject.Properties.Name -contains $required) -or [string]::IsNullOrWhiteSpace($w.$required)) {
+                    throw "SuppressionWindowsJson entry '$($w.name)' with recurrenceType '$($w.recurrenceType)' requires '$required' (format 'HH:mm:ss')."
+                }
+            }
+        }
+        if ($w.recurrenceType -eq 'Weekly' -and (-not ($w.PSObject.Properties.Name -contains 'daysOfWeek') -or @($w.daysOfWeek).Count -eq 0)) {
+            throw "SuppressionWindowsJson entry '$($w.name)' with recurrenceType 'Weekly' requires a non-empty 'daysOfWeek' array."
+        }
+        if ($w.recurrenceType -eq 'Monthly' -and (-not ($w.PSObject.Properties.Name -contains 'daysOfMonth') -or @($w.daysOfMonth).Count -eq 0)) {
+            throw "SuppressionWindowsJson entry '$($w.name)' with recurrenceType 'Monthly' requires a non-empty 'daysOfMonth' array."
+        }
+    }
+
+    return $windows
+}
+
 Write-Host "==> Validating parameters for tier '$ServiceTier'..." -ForegroundColor Cyan
 
 if ($ServiceTier -in @('Advanced', 'Premium') -and [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceResourceId)) {
@@ -189,6 +244,7 @@ Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
 
 $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
 $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
+$suppressionWindows = Assert-SuppressionWindows -Json $SuppressionWindowsJson
 
 if ($emailReceivers.Count -eq 0 -and $webhookReceivers.Count -eq 0) {
     Write-Warning "No email or webhook receivers supplied. Alerts will fire with nobody notified."
@@ -212,6 +268,8 @@ $templateFile = Join-Path $repoRoot 'bicep/main.bicep'
 # Bicep params must be passed as a single JSON-escaped string for array-typed CLI parameters.
 $emailReceiversCompact = ($emailReceivers | ConvertTo-Json -Compress -AsArray)
 $webhookReceiversCompact = ($webhookReceivers | ConvertTo-Json -Compress -AsArray)
+$suppressionWindowsCompact = ($suppressionWindows | ConvertTo-Json -Compress -AsArray)
+$includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
 
 if ([string]::IsNullOrWhiteSpace($DeploymentStackName)) {
     $DeploymentStackName = "stack-azurelocal-alerts-$ResourceGroupName"
@@ -235,6 +293,8 @@ $templateParameters = @(
     "volumeLatencyWriteThresholdSeconds=$VolumeLatencyWriteThresholdSeconds",
     "networkInThresholdBytesPerSecond=$NetworkInThresholdBytesPerSecond",
     "networkOutThresholdBytesPerSecond=$NetworkOutThresholdBytesPerSecond",
+    "includeServiceHealth=$includeServiceHealthValue",
+    "suppressionWindows=$suppressionWindowsCompact",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
 ) -join ' '
 

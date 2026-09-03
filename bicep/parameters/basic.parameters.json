@@ -65,6 +65,12 @@
     "networkOutThresholdBytesPerSecond": {
       "value": 200000000000
     },
+    "includeServiceHealth": {
+      "value": true
+    },
+    "suppressionWindows": {
+      "value": []
+    },
     "heartbeatMissingMinutes": {
       "value": 10
     },

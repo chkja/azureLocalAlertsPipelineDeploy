@@ -128,6 +128,8 @@ stages:
                   VolumeLatencyWriteThresholdSeconds = '$(volumeLatencyWriteThresholdSeconds)'
                   NetworkInThresholdBytesPerSecond  = [int64]'$(networkInThresholdBytesPerSecond)'
                   NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
+                  IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
+                  SuppressionWindowsJson            = '$(suppressionWindowsJson)'
                   HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
                   DenySettingsMode                 = 'denyDelete'
                   ActionOnUnmanage                 = 'deleteResources'
@@ -175,6 +177,8 @@ stages:
                         VolumeLatencyWriteThresholdSeconds = '$(volumeLatencyWriteThresholdSeconds)'
                         NetworkInThresholdBytesPerSecond  = [int64]'$(networkInThresholdBytesPerSecond)'
                         NetworkOutThresholdBytesPerSecond = [int64]'$(networkOutThresholdBytesPerSecond)'
+                        IncludeServiceHealth              = [bool]::Parse('$(includeServiceHealth)')
+                        SuppressionWindowsJson            = '$(suppressionWindowsJson)'
                         HeartbeatMissingMinutes          = [int]'$(heartbeatMissingMinutes)'
                         DenySettingsMode                 = 'denyDelete'
                         ActionOnUnmanage                 = 'deleteResources'
