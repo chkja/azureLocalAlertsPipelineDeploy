@@ -392,7 +392,7 @@ continuous stream, so in practice they behave similarly to a stateful alert with
 ## 4. Exploration commands - confirm signals before tuning thresholds
 
 Run these against a live cluster/workspace before relying on the default thresholds in
-`bicep/parameters/*.json`. A wrapper script is provided: `scripts/Get-AzureLocalAlertExploration.ps1`.
+`pipeline/environments/*.bicepparam`. A wrapper script is provided: `scripts/Get-AzureLocalAlertExploration.ps1`.
 
 ### Metrics (works for all tiers - no Log Analytics required)
 
@@ -484,9 +484,8 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `DcrResourceId` (script param, not a Bicep param) | `''` (auto-discover) | Advanced/Premium - DCR to extend with the new event log channels, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
-All are Bicep parameters - override per environment in `pipeline/environments/<name>.bicepparam`
-(the pipeline-driven source of truth), or in `bicep/parameters/*.json` for a legacy manual
-`az deployment` example.
+All are Bicep parameters - override per environment in `pipeline/environments/<name>.bicepparam`,
+the pipeline-driven source of truth for every tenant/cluster.
 
 ## 6. Related reading
 

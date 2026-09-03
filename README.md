@@ -15,7 +15,6 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/actionGroup.bicep` | Action Group with email + webhook receivers |
 | `bicep/modules/metricAlerts.bicep` | Platform metric alerts (storage degraded, CPU, memory) |
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
-| `bicep/parameters/*.parameters.json` | Legacy example parameter sets per tier (JSON; superseded by the `.bicepparam` files below) |
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
 | `scripts/Get-AzureLocalAlertExploration.ps1` | Read-only exploration of metrics/tables against a live cluster |
 | `pipeline/azure-pipelines.yml` | Azure DevOps CD pipeline |
