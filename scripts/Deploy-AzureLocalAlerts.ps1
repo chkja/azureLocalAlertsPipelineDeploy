@@ -520,7 +520,7 @@ Assert-JsonArray -Value $CriticalServiceNamesJson -ParamName 'CriticalServiceNam
 $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
 $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
 $criticalServiceNames = @($CriticalServiceNamesJson | ConvertFrom-Json)
-$suppressionWindows = Assert-SuppressionWindows -Json $SuppressionWindowsJson
+$suppressionWindows = @(Assert-SuppressionWindows -Json $SuppressionWindowsJson)
 Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
 
 if ($ServiceTier -eq 'Basic' -and -not [string]::IsNullOrWhiteSpace($LogAlertsMuteActionsDuration)) {
@@ -570,11 +570,25 @@ if ($LASTEXITCODE -ne 0) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $templateFile = Join-Path $repoRoot 'bicep/main.bicep'
 
+function ConvertTo-CompactJsonArray {
+    <#
+        Serializes $Items (already normalized to an array by the caller, e.g. via @(...)) to a
+        compact single-line JSON array string, including the correct "[]" for an empty array.
+        Deliberately uses -InputObject (not the pipeline) and omits -AsArray: piping an empty
+        array to ConvertTo-Json never invokes its process block (zero objects to enumerate), so
+        it silently returns $null instead of "[]" - and combining -InputObject with -AsArray on a
+        *non-empty* array double-wraps the result (e.g. "[[{...}]]"). Passing the array directly
+        via -InputObject with neither pipe nor -AsArray handles empty/one/many items correctly.
+    #>
+    param([array]$Items)
+    return (ConvertTo-Json -InputObject $Items -Compress)
+}
+
 # Bicep params must be passed as a single JSON-escaped string for array-typed CLI parameters.
-$emailReceiversCompact = ($emailReceivers | ConvertTo-Json -Compress -AsArray)
-$webhookReceiversCompact = ($webhookReceivers | ConvertTo-Json -Compress -AsArray)
-$suppressionWindowsCompact = ($suppressionWindows | ConvertTo-Json -Compress -AsArray)
-$criticalServiceNamesCompact = ($criticalServiceNames | ConvertTo-Json -Compress -AsArray)
+$emailReceiversCompact = ConvertTo-CompactJsonArray -Items $emailReceivers
+$webhookReceiversCompact = ConvertTo-CompactJsonArray -Items $webhookReceivers
+$suppressionWindowsCompact = ConvertTo-CompactJsonArray -Items $suppressionWindows
+$criticalServiceNamesCompact = ConvertTo-CompactJsonArray -Items $criticalServiceNames
 $includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
 $enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
 
@@ -609,16 +623,23 @@ $templateParameters = @(
     "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
     "criticalServiceNames=$criticalServiceNamesCompact",
     "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
-) -join ' '
+)
 
 $stackAction = if ($WhatIf) { 'validate' } else { 'create' }
 
+# `--parameters` must receive each key=value pair as its OWN argv token - the Azure CLI's
+# argparse (nargs='+') expects a list of separate parameter strings, not one string containing
+# all pairs joined by spaces. Splicing $templateParameters into the array (rather than
+# `-join ' '`-ing it into a single element) preserves that. Getting this wrong doesn't error;
+# az silently fails to parse any parameters and falls back to prompting interactively for the
+# first missing required one (e.g. "Please provide string value for 'resourceGroupName'").
 $azArgs = @(
     'stack', 'sub', $stackAction,
     '--name', $DeploymentStackName,
     '--location', $Location,
     '--template-file', $templateFile,
-    '--parameters', $templateParameters,
+    '--parameters'
+) + $templateParameters + @(
     '--deny-settings-mode', $DenySettingsMode,
     '--action-on-unmanage', $ActionOnUnmanage,
     '--description', "Azure Local alerts ($ServiceTier) for $ClusterResourceId"
