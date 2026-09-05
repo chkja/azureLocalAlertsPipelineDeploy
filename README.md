@@ -16,6 +16,7 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/metricAlerts.bicep` | Platform metric alerts (storage degraded, CPU, memory) |
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
+| `scripts/src/powershell/*.ps1` | One file per helper function used by `Deploy-AzureLocalAlerts.ps1` (dot-sourced automatically at startup) |
 | `pipeline/azure-pipelines.yml` | Azure DevOps CD pipeline |
 | `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. |
 | `pipeline/environments/*.yml` | Per-tenant/cluster pipeline metadata only: service connection, subscription ID, DCR resource ID, and a pointer to the companion `.bicepparam` file |
