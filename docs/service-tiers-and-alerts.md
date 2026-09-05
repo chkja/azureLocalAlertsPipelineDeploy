@@ -139,8 +139,8 @@ One Action Group per cluster is reused by every alert rule for that cluster, and
 The resource group named by the `resourceGroupName` parameter is always created/ensured as part
 of `main.bicep` (idempotent - safe against an already-existing RG); there is no separate toggle.
 
-> **Azure DevOps only.** `pipeline/azure-pipelines.yml` and `pipeline/environments/*.yml` are
-> written in Azure DevOps YAML pipeline syntax and only run in Azure DevOps - they are not
+> **Azure DevOps only.** `pipeline/azure-pipelines.yml` is
+> written in Azure DevOps YAML pipeline syntax and only runs in Azure DevOps - it is not
 > portable to GitHub Actions (different schema/task model entirely). Everything else in this
 > repo - the Bicep templates and `scripts/Deploy-AzureLocalAlerts.ps1` - is platform-agnostic and
 > can be invoked from any shell/CI system, including a GitHub Actions workflow, if you wanted to
@@ -248,34 +248,40 @@ out entirely if you'd rather manage the DCR's event collection yourself.
 
 ### Config-as-code / drift prevention
 
-Each cluster/tenant is defined by a **pair** of committed files in `pipeline/environments/`:
-- `<name>.bicepparam` pins every actual Bicep template parameter - service tier, resource
-  group/cluster/workspace resource IDs, thresholds, and action group receivers. This is the file
-  to edit when tuning alert thresholds, changing tier, or onboarding scope.
-- `<name>.yml` pins the non-template, pipeline-level metadata a `.bicepparam` file can't express:
+Each cluster/tenant is defined by:
+- `pipeline/environments/<name>.bicepparam` - pins every actual Bicep template parameter: service
+  tier, resource group/cluster/workspace resource IDs, thresholds, and action group receivers.
+  This is the file to edit when tuning alert thresholds, changing tier, or onboarding scope.
+- A matching key in `azure-pipelines.yml`'s `environments` parameter (named after that same
+  `<name>`) - pins the non-template, pipeline-level metadata a `.bicepparam` file can't express:
   which Azure DevOps service connection (tenant) to deploy with, the subscription ID, and (for the
-  script's pre-flight DCR event-log check only) the DCR resource ID. It also points at its
-  companion `.bicepparam` file via the `bicepParamFile` variable.
+  script's pre-flight DCR event-log check only) the DCR resource ID.
 
 `pipeline/azure-pipelines.yml` triggers on every push to `main` that touches `bicep/**` or
-`pipeline/environments/**`. Because Bicep deployments are declarative, each run re-applies exactly
-what's committed - reverting any manual portal changes on the next run instead of letting
+`pipeline/environments/**`, and generates one Validate job and one Deploy job **per entry** in the
+`environments` parameter at compile time (`${{ each }}` template expressions) - so every committed
+customer is validated/deployed together on every run, not just one. (An earlier design used a
+single queue-time `environmentFile` parameter to pick exactly one customer per run; that meant a
+triggered/automatic run always deployed whichever customer was the parameter's *default*,
+regardless of which customer's files the push actually changed - a bug this per-entry job
+generation removes entirely.) Because Bicep deployments are declarative, each run re-applies
+exactly what's committed - reverting any manual portal changes on the next run instead of letting
 configuration drift persist silently. The deny-delete deployment stack setting above adds a second
 layer of protection on top of pipeline-driven redeployment.
 
 To onboard a new cluster:
-1. Copy an existing `<name>.bicepparam` and `<name>.yml` pair in `pipeline/environments/` and fill
-   in the tenant's values in both.
-2. Add the base file name (without extension) to the `environmentFile` parameter's `values` list
-   in `azure-pipelines.yml`.
-3. Merge to `main` - the pipeline deploys automatically for that environment on the next manual
-   run selecting it, or wire a dedicated trigger/stage per environment if you want every commit
-   to redeploy every tenant unattended.
+1. Copy an existing `<name>.bicepparam` file in `pipeline/environments/` and fill in the tenant's
+   values.
+2. Add a new key (named after that same `<name>`) to the `environments` parameter in
+   `azure-pipelines.yml`, with its `serviceConnection`, `subscriptionId`, and `dcrResourceId`.
+3. Merge to `main` - the next run (triggered or manual) validates and deploys it alongside every
+   other committed customer automatically.
 
-To change service connection **once** without touching git, use the `serviceConnectionOverride`
-runtime parameter on a manual pipeline run. There is no service-tier override at queue time - since
-tier is now a typed Bicep parameter inside the `.bicepparam` file, change it there (or run
-`scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile ...` locally with an edited copy) instead.
+To test a single customer without affecting the others, use "Run pipeline" and supply a JSON
+object for the `environments` queue-time parameter containing only that one key. There is no
+service-tier override at queue time - since tier is a typed Bicep parameter inside the
+`.bicepparam` file, change it there (or run `scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile
+...` locally with an edited copy) instead.
 
 ### Standing off-hours notification suppression (Basic/Advanced)
 

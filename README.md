@@ -3,7 +3,7 @@
 Pipeline-based deployment of Azure Local alert rules (Action Group + metric/log alerts), aligned
 to the Basic / Advanced / Premium tiers of the Azure Local Managed Service.
 
-> **Note:** everything under `pipeline/` (`azure-pipelines.yml` and `pipeline/environments/*.yml`)
+> **Note:** everything under `pipeline/` (`azure-pipelines.yml`)
 > is written in **Azure DevOps YAML pipeline** syntax (`trigger:`/`pool:`/`stages:`/`jobs:`/
 > `task: AzureCLI@2`, etc.) and only runs in Azure DevOps - it is **not** compatible with GitHub
 > Actions workflows, which use a different schema (`on:`/`runs-on:`/`uses:`). The Bicep templates
@@ -24,9 +24,8 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
 | `scripts/src/powershell/*.ps1` | One file per helper function used by `Deploy-AzureLocalAlerts.ps1` (dot-sourced automatically at startup) |
-| `pipeline/azure-pipelines.yml` | **Azure DevOps** CD pipeline (Azure DevOps YAML syntax only - not usable as a GitHub Actions workflow) |
-| `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. |
-| `pipeline/environments/*.yml` | Per-tenant/cluster pipeline metadata only: service connection, subscription ID, DCR resource ID, and a pointer to the companion `.bicepparam` file |
+| `pipeline/azure-pipelines.yml` | **Azure DevOps** CD pipeline (Azure DevOps YAML syntax only - not usable as a GitHub Actions workflow). Generates one Validate + one Deploy job **per entry** in its `environments` parameter, so every committed customer is validated/deployed on every run |
+| `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. Service connection/subscription ID/DCR resource ID for each now live inline in `azure-pipelines.yml`'s `environments` parameter, keyed by the matching base file name |
 
 ## Quick start
 
@@ -60,10 +59,11 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
      ```
    The resource group is always created/ensured as part of this deployment (no separate toggle).
 2. **Onboard via pipeline**: copy `pipeline/environments/example-customera-basic.bicepparam` (tier,
-   thresholds, receivers, resource IDs) and `example-customera-basic.yml` (service connection,
-   subscription ID, DCR resource ID) to a new pair of files named after your customer/cluster, fill
-   in both, add the base file name to the `environmentFile` parameter list in
-   `pipeline/azure-pipelines.yml`, and merge to `main`.
+   thresholds, receivers, resource IDs) to a new file named after your customer/cluster, fill it
+   in, add a matching new key (service connection, subscription ID, DCR resource ID) to the
+   `environments` parameter in `pipeline/azure-pipelines.yml`, and merge to `main` - the pipeline
+   generates a Validate + Deploy job for every entry in `environments` automatically, so this new
+   customer is deployed alongside every other one on the next run.
 
 ## What it looks like
 
@@ -71,7 +71,8 @@ Running the script deploys the Action Group, Alert Processing Rules (off-hours s
 and metric/log alerts as a single Azure Deployment Stack. The screenshot below shows a one-off
 **local** run (via `pwsh -File scripts/Deploy-AzureLocalAlerts.ps1`, as in the "Deploy locally"
 quick-start step) - useful for ad-hoc testing, but not how this should run day-to-day: onboarded
-customers/clusters should go through the **pipeline** (`pipeline/azure-pipelines.yml`) instead.
+customers/clusters should go through the **pipeline** (`pipeline/azure-pipelines.yml`) instead,
+which validates/deploys every entry committed to its `environments` parameter automatically.
 Today that pipeline only triggers on a push to `main` touching `bicep/**`/`pipeline/environments/**`
 (see the pipeline's header comments); add a
 [`schedules:`](https://learn.microsoft.com/azure/devops/pipelines/process/scheduled-triggers)
