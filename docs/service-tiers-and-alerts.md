@@ -139,6 +139,13 @@ One Action Group per cluster is reused by every alert rule for that cluster, and
 The resource group named by the `resourceGroupName` parameter is always created/ensured as part
 of `main.bicep` (idempotent - safe against an already-existing RG); there is no separate toggle.
 
+> **Azure DevOps only.** `pipeline/azure-pipelines.yml` and `pipeline/environments/*.yml` are
+> written in Azure DevOps YAML pipeline syntax and only run in Azure DevOps - they are not
+> portable to GitHub Actions (different schema/task model entirely). Everything else in this
+> repo - the Bicep templates and `scripts/Deploy-AzureLocalAlerts.ps1` - is platform-agnostic and
+> can be invoked from any shell/CI system, including a GitHub Actions workflow, if you wanted to
+> reimplement the orchestration there instead.
+
 ### Deployment stacks - tracked resources, deny-delete protection
 
 Instead of a plain `az deployment sub create`, `scripts/Deploy-AzureLocalAlerts.ps1` deploys via

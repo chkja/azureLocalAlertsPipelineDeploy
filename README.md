@@ -3,6 +3,13 @@
 Pipeline-based deployment of Azure Local alert rules (Action Group + metric/log alerts), aligned
 to the Basic / Advanced / Premium tiers of the Azure Local Managed Service.
 
+> **Note:** everything under `pipeline/` (`azure-pipelines.yml` and `pipeline/environments/*.yml`)
+> is written in **Azure DevOps YAML pipeline** syntax (`trigger:`/`pool:`/`stages:`/`jobs:`/
+> `task: AzureCLI@2`, etc.) and only runs in Azure DevOps - it is **not** compatible with GitHub
+> Actions workflows, which use a different schema (`on:`/`runs-on:`/`uses:`). The Bicep templates
+> and `scripts/Deploy-AzureLocalAlerts.ps1` are platform-agnostic and can be run from anywhere
+> (see "Deploy locally" below); only the CI/CD orchestration in `pipeline/` is Azure DevOps-specific.
+
 See **[docs/service-tiers-and-alerts.md](docs/service-tiers-and-alerts.md)** for the full tier-to-alert
 mapping, the KQL/CLI exploration commands, and how drift prevention works.
 
@@ -17,7 +24,7 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `bicep/modules/logAlerts.bicep` | Log Analytics scheduled query alerts (heartbeat, volume health, error-rate) |
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
 | `scripts/src/powershell/*.ps1` | One file per helper function used by `Deploy-AzureLocalAlerts.ps1` (dot-sourced automatically at startup) |
-| `pipeline/azure-pipelines.yml` | Azure DevOps CD pipeline |
+| `pipeline/azure-pipelines.yml` | **Azure DevOps** CD pipeline (Azure DevOps YAML syntax only - not usable as a GitHub Actions workflow) |
 | `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. |
 | `pipeline/environments/*.yml` | Per-tenant/cluster pipeline metadata only: service connection, subscription ID, DCR resource ID, and a pointer to the companion `.bicepparam` file |
 
