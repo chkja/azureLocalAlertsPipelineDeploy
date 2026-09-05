@@ -1,49 +1,8 @@
-# Azure Local Alerts - CD pipeline
+# yaml-language-server: $schema=none
+# Azure Local Alerts - CD pipeline (Azure DevOps only, see README.md)
 #
-# Purpose
-#   Deploys the Action Group + tier-appropriate metric/log alert rules (bicep/) for EVERY
-#   committed Azure Local cluster in one run, using the `environments` parameter below plus each
-#   entry's companion `pipeline/environments/<name>.bicepparam` file.
-#
-# Multi-customer model
-#   The `environments` parameter is an object keyed by environment/customer name (matching a
-#   `pipeline/environments/<name>.bicepparam` file). Its value carries the non-template,
-#   pipeline-level metadata a `.bicepparam` file can't express: which Azure DevOps service
-#   connection (tenant) to deploy with, the subscription ID, and (for the script's pre-flight DCR
-#   event-log check only) the DCR resource ID.
-#
-#   One Validate job and one Deploy job are generated PER ENTRY at compile time (via `${{ each }}`
-#   template expressions) - so every push to main (or every manual/scheduled run) validates and
-#   deploys every committed customer together, not just one.
-#
-# Config-as-code / drift prevention
-#   Because Bicep deployments are declarative/idempotent, every run re-applies exactly what's
-#   committed - reverting any manual portal change (drift) on the next run instead of letting it
-#   persist silently. Deployments are wrapped in an Azure Deployment Stack (deny mode: denyDelete,
-#   see scripts/Deploy-AzureLocalAlerts.ps1) so every resource created - including the resource
-#   group - is tracked as a single managed unit, and deletion of any managed resource outside the
-#   stack (e.g. an accidental portal delete) is denied by Azure Resource Manager.
-#
-# Onboarding a new customer/cluster
-#   1. Create `pipeline/environments/<name>.bicepparam` (copy an existing one and fill in tier,
-#      resource IDs, thresholds, receivers).
-#   2. Add a new key to the `environments` parameter default below, named after that same
-#      `<name>`, with its `serviceConnection`, `subscriptionId`, and `dcrResourceId`.
-#   3. Merge to main - the next run (triggered or manual) validates and deploys it alongside every
-#      other committed customer.
-#
-# Testing a single customer without affecting the others
-#   Use "Run pipeline" and supply a JSON object for the `environments` parameter containing only
-#   that one key (queue-time parameters can override the committed default for a one-off run).
-#   There is no service-tier override at queue time - since tier is a typed Bicep parameter inside
-#   the `.bicepparam` file, change it there (or run
-#   `scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile ...` locally with an edited copy) instead.
-#
-# Prerequisites
-#   - One Azure DevOps ARM service connection per tenant/subscription (name must match the
-#     `serviceConnection` value committed for that entry below).
-#   - Bicep CLI is bundled with recent Azure CLI images on Microsoft-hosted agents; no separate
-#     install step required.
+# Generates one Validate job + one Deploy job per entry in the `environments` parameter below.
+# To onboard a new customer: add its .bicepparam file, then append an entry here.
 
 trigger:
   branches:
@@ -58,28 +17,28 @@ trigger:
 pr: none
 
 parameters:
-  - name: environments
-    displayName: 'Environments (tenant/cluster) to validate + deploy - one job generated per entry'
-    type: object
-    default:
-      example-customera-basic:
-        serviceConnection: 'sc-customera-prod'
-        subscriptionId: '00000000-0000-0000-0000-000000000000'
-        dcrResourceId: ''
-      example-customerb-advanced:
-        serviceConnection: 'sc-customerb-prod'
-        subscriptionId: '00000000-0000-0000-0000-000000000000'
-        dcrResourceId: ''
-      example-customerc-premium:
-        serviceConnection: 'sc-customerc-prod'
-        subscriptionId: '00000000-0000-0000-0000-000000000000'
-        dcrResourceId: ''
-      # Add your own tenant here (key must match a pipeline/environments/<key>.bicepparam file).
-
   - name: whatIfOnly
     displayName: 'Validate only (what-if), do not apply changes'
     type: boolean
     default: false
+  - name: environments
+    type: object
+    default:
+      - name: example-customera-basic
+        serviceConnection: sc-customera-prod
+        subscriptionId: '00000000-0000-0000-0000-000000000000'
+        bicepParamFile: pipeline/environments/example-customera-basic.bicepparam
+        dcrResourceId: ''
+      - name: example-customerb-advanced
+        serviceConnection: sc-customerb-prod
+        subscriptionId: '00000000-0000-0000-0000-000000000000'
+        bicepParamFile: pipeline/environments/example-customerb-advanced.bicepparam
+        dcrResourceId: ''
+      - name: example-customerc-premium
+        serviceConnection: sc-customerc-prod
+        subscriptionId: '00000000-0000-0000-0000-000000000000'
+        bicepParamFile: pipeline/environments/example-customerc-premium.bicepparam
+        dcrResourceId: ''
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -89,50 +48,47 @@ stages:
     displayName: 'Validate (what-if)'
     jobs:
       - ${{ each env in parameters.environments }}:
-        - job: WhatIf_${{ replace(env.key, '-', '_') }}
-          displayName: 'az stack sub validate - ${{ env.key }}'
-          steps:
-            - task: AzureCLI@2
-              displayName: 'Run Deploy-AzureLocalAlerts.ps1 -WhatIf'
-              inputs:
-                azureSubscription: '${{ env.value.serviceConnection }}'
-                scriptType: 'pscore'
-                scriptLocation: 'inlineScript'
-                inlineScript: |
-                  $ErrorActionPreference = 'Stop'
-                  ./scripts/Deploy-AzureLocalAlerts.ps1 `
-                    -SubscriptionId '${{ env.value.subscriptionId }}' `
-                    -BicepParamFile 'pipeline/environments/${{ env.key }}.bicepparam' `
-                    -DcrResourceId '${{ env.value.dcrResourceId }}' `
-                    -DenySettingsMode 'denyDelete' `
-                    -ActionOnUnmanage 'deleteResources' `
-                    -WhatIf
+          - job: WhatIf_${{ replace(env.name, '-', '_') }}
+            displayName: 'az stack sub validate - ${{ env.name }}'
+            steps:
+              - checkout: self
+              - task: AzureCLI@2
+                displayName: 'Run Deploy-AzureLocalAlerts.ps1 -WhatIf'
+                inputs:
+                  azureSubscription: ${{ env.serviceConnection }}
+                  scriptType: 'pscore'
+                  scriptLocation: 'inlineScript'
+                  inlineScript: |
+                    $ErrorActionPreference = 'Stop'
+                    ./scripts/Deploy-AzureLocalAlerts.ps1 `
+                      -SubscriptionId '${{ env.subscriptionId }}' `
+                      -BicepParamFile '${{ env.bicepParamFile }}' `
+                      -DcrResourceId '${{ env.dcrResourceId }}' `
+                      -WhatIf
 
   - stage: Deploy
     displayName: 'Deploy'
-    condition: and(succeeded(), eq('${{ parameters.whatIfOnly }}', 'False'))
     dependsOn: Validate
+    condition: and(succeeded(), eq('${{ parameters.whatIfOnly }}', 'False'))
     jobs:
       - ${{ each env in parameters.environments }}:
-        - deployment: Deploy_${{ replace(env.key, '-', '_') }}
-          displayName: 'Deploy Azure Local alerts - ${{ env.key }}'
-          environment: 'azure-local-alerts-${{ env.key }}'
-          strategy:
-            runOnce:
-              deploy:
-                steps:
-                  - checkout: self
-                  - task: AzureCLI@2
-                    displayName: 'Run Deploy-AzureLocalAlerts.ps1'
-                    inputs:
-                      azureSubscription: '${{ env.value.serviceConnection }}'
-                      scriptType: 'pscore'
-                      scriptLocation: 'inlineScript'
-                      inlineScript: |
-                        $ErrorActionPreference = 'Stop'
-                        ./scripts/Deploy-AzureLocalAlerts.ps1 `
-                          -SubscriptionId '${{ env.value.subscriptionId }}' `
-                          -BicepParamFile 'pipeline/environments/${{ env.key }}.bicepparam' `
-                          -DcrResourceId '${{ env.value.dcrResourceId }}' `
-                          -DenySettingsMode 'denyDelete' `
-                          -ActionOnUnmanage 'deleteResources'
+          - deployment: Deploy_${{ replace(env.name, '-', '_') }}
+            displayName: 'Deploy Azure Local alerts - ${{ env.name }}'
+            environment: 'azure-local-alerts-${{ env.name }}'
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - checkout: self
+                    - task: AzureCLI@2
+                      displayName: 'Run Deploy-AzureLocalAlerts.ps1'
+                      inputs:
+                        azureSubscription: ${{ env.serviceConnection }}
+                        scriptType: 'pscore'
+                        scriptLocation: 'inlineScript'
+                        inlineScript: |
+                          $ErrorActionPreference = 'Stop'
+                          ./scripts/Deploy-AzureLocalAlerts.ps1 `
+                            -SubscriptionId '${{ env.subscriptionId }}' `
+                            -BicepParamFile '${{ env.bicepParamFile }}' `
+                            -DcrResourceId '${{ env.dcrResourceId }}'

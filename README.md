@@ -25,7 +25,7 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 | `scripts/Deploy-AzureLocalAlerts.ps1` | Validates inputs, then runs `az stack sub create` (or `validate`); accepts either explicit `-Parameter Value` flags or a single `-BicepParamFile` |
 | `scripts/src/powershell/*.ps1` | One file per helper function used by `Deploy-AzureLocalAlerts.ps1` (dot-sourced automatically at startup) |
 | `pipeline/azure-pipelines.yml` | **Azure DevOps** CD pipeline (Azure DevOps YAML syntax only - not usable as a GitHub Actions workflow). Generates one Validate + one Deploy job **per entry** in its `environments` parameter, so every committed customer is validated/deployed on every run |
-| `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. Service connection/subscription ID/DCR resource ID for each now live inline in `azure-pipelines.yml`'s `environments` parameter, keyed by the matching base file name |
+| `pipeline/environments/*.bicepparam` | Per-tenant/cluster Bicep template parameters: tier, resource IDs, thresholds, receivers, etc. Service connection/subscription ID/DCR resource ID for each now live inline in `azure-pipelines.yml`'s `environments` parameter, keyed by `name` |
 
 ## Quick start
 
@@ -99,8 +99,8 @@ service down, general Health Service faults, Hyper-V availability):
 
 ## Prerequisites
 
-- Azure DevOps ARM service connection per tenant/subscription (name referenced by
-  `serviceConnection` in each environment file).
+- Azure DevOps ARM service connection per tenant/subscription (name set as `serviceConnection`
+  for that customer's entry in the `environments` parameter in `azure-pipelines.yml`).
 - Azure CLI >= 2.61 (for the built-in `az stack` command) + Bicep (bundled on Microsoft-hosted
   `ubuntu-latest` agents). Older CLI versions get the `deployment-stacks` extension installed
   automatically by `Deploy-AzureLocalAlerts.ps1`.

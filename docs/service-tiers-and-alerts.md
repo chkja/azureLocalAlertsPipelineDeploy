@@ -252,32 +252,30 @@ Each cluster/tenant is defined by:
 - `pipeline/environments/<name>.bicepparam` - pins every actual Bicep template parameter: service
   tier, resource group/cluster/workspace resource IDs, thresholds, and action group receivers.
   This is the file to edit when tuning alert thresholds, changing tier, or onboarding scope.
-- A matching key in `azure-pipelines.yml`'s `environments` parameter (named after that same
+- A matching entry in `azure-pipelines.yml`'s `environments` parameter (`name` matching that same
   `<name>`) - pins the non-template, pipeline-level metadata a `.bicepparam` file can't express:
   which Azure DevOps service connection (tenant) to deploy with, the subscription ID, and (for the
   script's pre-flight DCR event-log check only) the DCR resource ID.
 
 `pipeline/azure-pipelines.yml` triggers on every push to `main` that touches `bicep/**` or
 `pipeline/environments/**`, and generates one Validate job and one Deploy job **per entry** in the
-`environments` parameter at compile time (`${{ each }}` template expressions) - so every committed
-customer is validated/deployed together on every run, not just one. Because Bicep deployments are
-declarative, each run re-applies exactly what's committed - reverting any manual portal changes on
-the next run instead of letting configuration drift persist silently. The deny-delete deployment
-stack setting above adds a second layer of protection on top of pipeline-driven redeployment.
+`environments` parameter at compile time, so every committed customer is validated/deployed
+together on every run, not just one. Because Bicep deployments are declarative, each run
+re-applies exactly what's committed - reverting any manual portal changes on the next run instead
+of letting configuration drift persist silently. The deny-delete deployment stack setting above
+adds a second layer of protection on top of pipeline-driven redeployment.
 
 To onboard a new cluster:
 1. Copy an existing `<name>.bicepparam` file in `pipeline/environments/` and fill in the tenant's
    values.
-2. Add a new key (named after that same `<name>`) to the `environments` parameter in
-   `azure-pipelines.yml`, with its `serviceConnection`, `subscriptionId`, and `dcrResourceId`.
+2. Append a new entry to the `environments` parameter in `azure-pipelines.yml`, with its `name`,
+   `serviceConnection`, `subscriptionId`, `bicepParamFile`, and `dcrResourceId`.
 3. Merge to `main` - the next run (triggered or manual) validates and deploys it alongside every
    other committed customer automatically.
 
-To test a single customer without affecting the others, use "Run pipeline" and supply a JSON
-object for the `environments` queue-time parameter containing only that one key. There is no
-service-tier override at queue time - since tier is a typed Bicep parameter inside the
-`.bicepparam` file, change it there (or run `scripts/Deploy-AzureLocalAlerts.ps1 -BicepParamFile
-...` locally with an edited copy) instead.
+To test a single customer without affecting the others, run `scripts/Deploy-AzureLocalAlerts.ps1
+-BicepParamFile ...` locally with that customer's `.bicepparam` file, or temporarily comment out
+the other customers' jobs before queuing a manual pipeline run.
 
 ### Standing off-hours notification suppression (Basic/Advanced)
 
