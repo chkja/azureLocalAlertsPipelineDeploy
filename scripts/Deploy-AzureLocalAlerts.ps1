@@ -126,10 +126,12 @@
     live resource) - the DCR is a shared prerequisite resource typically owned/created by the
     customer's onboarding/Arc setup, not something this stack should track or could safely
     delete. If not supplied, the script attempts to auto-discover it from a
-    Microsoft.HybridCompute/machines resource in ClusterResourceId's resource group. Auto-discovery
-    or the update itself failing is a non-fatal warning, not a deployment blocker - the alerts
-    still deploy, they just won't receive data for those specific event log channels until the
-    DCR is extended (manually, or by re-running with a valid DcrResourceId).
+    Microsoft.HybridCompute/machines resource in ClusterResourceId's resource group - this
+    auto-discovery is a HARD requirement (Advanced/Premium, not -WhatIf, not -SkipDcrUpdate):
+    if no DCR can be identified, the deployment STOPS with a clear error instead of proceeding,
+    since alert rules deployed without a confirmed DCR update cannot be trusted to ever receive
+    data. Use -SkipDcrUpdate to intentionally bypass DCR handling (e.g. a quick test deployment
+    where you'll extend the DCR separately).
 
 .PARAMETER SkipDcrUpdate
     Switch. Skip DCR discovery/extension entirely, even for Advanced/Premium.
@@ -349,14 +351,13 @@ if ($ServiceTier -in @('Advanced', 'Premium')) {
         $effectiveDcrResourceId = $DcrResourceId
         if ([string]::IsNullOrWhiteSpace($effectiveDcrResourceId)) {
             Write-Host "==> No -DcrResourceId supplied, attempting auto-discovery..." -ForegroundColor Cyan
+            # Throws (not a warning + $null) if no DCR can be identified - a deployment that's
+            # supposed to extend a DCR's event collection must be able to trust that update
+            # actually happened, so this stops the deployment instead of silently shipping
+            # log alerts that will never receive data. Use -SkipDcrUpdate to bypass intentionally.
             $effectiveDcrResourceId = Find-AzureLocalDcrResourceId -ClusterResourceId $ClusterResourceId
         }
-        if (-not [string]::IsNullOrWhiteSpace($effectiveDcrResourceId)) {
-            Set-AzureLocalDcrEventCollection -DcrResourceId $effectiveDcrResourceId
-        }
-        else {
-            Write-Warning "No Data Collection Rule identified (supply -DcrResourceId, or ensure the cluster's Arc nodes have a DCR association) - the new cluster-quorum/service-watchdog/Hyper-V log alerts will deploy but won't receive data until this is resolved."
-        }
+        Set-AzureLocalDcrEventCollection -DcrResourceId $effectiveDcrResourceId
     }
     else {
         Write-Host "==> -SkipDcrUpdate set - not checking/extending the Data Collection Rule's event collection." -ForegroundColor Yellow
