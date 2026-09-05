@@ -61,9 +61,17 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 ## What it looks like
 
 Running the script deploys the Action Group, Alert Processing Rules (off-hours suppression),
-and metric/log alerts as a single Azure Deployment Stack:
+and metric/log alerts as a single Azure Deployment Stack. The screenshot below shows a one-off
+**local** run (via `pwsh -File scripts/Deploy-AzureLocalAlerts.ps1`, as in the "Deploy locally"
+quick-start step) - useful for ad-hoc testing, but not how this should run day-to-day: onboarded
+customers/clusters should go through the **pipeline** (`pipeline/azure-pipelines.yml`) instead.
+Today that pipeline only triggers on a push to `main` touching `bicep/**`/`pipeline/environments/**`
+(see the pipeline's header comments); add a
+[`schedules:`](https://learn.microsoft.com/azure/devops/pipelines/process/scheduled-triggers)
+trigger (e.g. daily) so it also re-applies automatically on a recurring cadence, catching any
+manual portal drift even when nobody has pushed a config change.
 
-![Deploy-AzureLocalAlerts.ps1 running against the Advanced tier](docs/images/deploy-script-run.png)
+![Deploy-AzureLocalAlerts.ps1 running locally (ad-hoc) against the Advanced tier](docs/images/deploy-script-run.png)
 
 ![Deployment completed successfully](docs/images/deploy-script-done.png)
 
