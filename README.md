@@ -58,6 +58,29 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
    in both, add the base file name to the `environmentFile` parameter list in
    `pipeline/azure-pipelines.yml`, and merge to `main`.
 
+## What it looks like
+
+Running the script deploys the Action Group, Alert Processing Rules (off-hours suppression),
+and metric/log alerts as a single Azure Deployment Stack:
+
+![Deploy-AzureLocalAlerts.ps1 running against the Advanced tier](docs/images/deploy-script-run.png)
+
+![Deployment completed successfully](docs/images/deploy-script-done.png)
+
+The resulting deployment stack shows as `Succeeded` in the portal:
+
+![Deployment stack succeeded](docs/images/deployment-stack-succeeded.png)
+
+...and the managed resource group contains the Action Group, off-hours suppression rules, and
+metric alert rules:
+
+![Deployed action group, alert processing rules, and metric alert rules](docs/images/deployed-resources-metric-alerts.png)
+
+...plus the Advanced/Premium log search alert rules (heartbeat, quorum, volume health, critical
+service down, general Health Service faults, Hyper-V availability):
+
+![Deployed log search alert rules](docs/images/deployed-resources-log-alerts.png)
+
 ## Prerequisites
 
 - Azure DevOps ARM service connection per tenant/subscription (name referenced by
