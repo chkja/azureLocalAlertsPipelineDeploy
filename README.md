@@ -68,16 +68,27 @@ mapping, the KQL/CLI exploration commands, and how drift prevention works.
 ## What it looks like
 
 Running the script deploys the Action Group, Alert Processing Rules (off-hours suppression),
-and metric/log alerts as a single Azure Deployment Stack. The screenshot below shows a one-off
-**local** run (via `pwsh -File scripts/Deploy-AzureLocalAlerts.ps1`, as in the "Deploy locally"
-quick-start step) - useful for ad-hoc testing, but not how this should run day-to-day: onboarded
-customers/clusters should go through the **pipeline** (`pipeline/azure-pipelines.yml`) instead,
-which validates/deploys every entry committed to its `environments` parameter automatically.
-Today that pipeline only triggers on a push to `main` touching `bicep/**`/`pipeline/environments/**`
-(see the pipeline's header comments); add a
-[`schedules:`](https://learn.microsoft.com/azure/devops/pipelines/process/scheduled-triggers)
+and metric/log alerts as a single Azure Deployment Stack. Onboarded customers/clusters should go
+through the **pipeline** (`pipeline/azure-pipelines.yml`), which validates/deploys every entry
+committed to its `environments` parameter automatically. Today that pipeline only triggers on a
+push to `main` touching `bicep/**`/`pipeline/environments/**` (see the pipeline's header comments);
+add a [`schedules:`](https://learn.microsoft.com/azure/devops/pipelines/process/scheduled-triggers)
 trigger (e.g. daily) so it also re-applies automatically on a recurring cadence, catching any
 manual portal drift even when nobody has pushed a config change.
+
+Running via the pipeline validates and deploys every committed customer in one go - each gets
+its own Validate and Deploy stage/job pair:
+
+![Azure DevOps pipeline run - Validate and Deploy stages both succeeded](docs/images/pipeline-run-stages-succeeded.png)
+
+...with the Deploy job's log showing the script compiling the customer's `.bicepparam` file,
+verifying the Log Analytics workspace, and auto-discovering the DCR:
+
+![Deploy job log - compiling bicepparam, verifying workspace, auto-discovering DCR](docs/images/pipeline-run-deploy-log.png)
+
+The screenshot below shows a one-off **local** run (via `pwsh -File scripts/Deploy-AzureLocalAlerts.ps1`,
+as in the "Deploy locally" quick-start step) - useful for ad-hoc testing, but not how this should
+run day-to-day; prefer the pipeline run shown above for onboarded customers/clusters.
 
 ![Deploy-AzureLocalAlerts.ps1 running locally (ad-hoc) against the Advanced tier](docs/images/deploy-script-run.png)
 
