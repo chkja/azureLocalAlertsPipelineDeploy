@@ -86,18 +86,18 @@
 .PARAMETER EnableOffHoursSuppression
     Basic/Advanced only (ignored for Premium, which commits to 24/7 response). Deploys a standing
     weekly suppression schedule (bicep/modules/offHoursSuppression.bicep) that silences
-    action-group notifications outside ServiceHoursStart/ServiceHoursEnd, Monday-Friday. Alert
+    action-group notifications outside ActiveMonitoringHoursStart/ActiveMonitoringHoursEnd, Monday-Friday. Alert
     rules still evaluate around the clock - only notifications are suppressed. Default $true.
 
-.PARAMETER ServiceHoursStart
+.PARAMETER ActiveMonitoringHoursStart
     Daily start of the committed service/working-hours window, "HH:mm:ss", Monday-Friday. Only
     used when EnableOffHoursSuppression is set and ServiceTier is not Premium. Default '07:00:00'.
 
-.PARAMETER ServiceHoursEnd
+.PARAMETER ActiveMonitoringHoursEnd
     Daily end of the committed service/working-hours window, "HH:mm:ss". Default '17:00:00'.
 
-.PARAMETER ServiceHoursTimeZone
-    Windows time zone name the service-hours window is evaluated in. Default 'Romance Standard Time'.
+.PARAMETER ActiveMonitoringHoursTimeZone
+    Windows time zone name the active-monitoring-hours window is evaluated in. Default 'Romance Standard Time'.
 
 .PARAMETER LogAlertsMuteActionsDuration
     Optional throttle for the Advanced/Premium log-based alerts (heartbeat, volume health, and the
@@ -236,13 +236,13 @@ param(
     [bool]$EnableOffHoursSuppression = $true,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
-    [string]$ServiceHoursStart = '07:00:00',
+    [string]$ActiveMonitoringHoursStart = '07:00:00',
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
-    [string]$ServiceHoursEnd = '17:00:00',
+    [string]$ActiveMonitoringHoursEnd = '17:00:00',
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
-    [string]$ServiceHoursTimeZone = 'Romance Standard Time',
+    [string]$ActiveMonitoringHoursTimeZone = 'Romance Standard Time',
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [string]$LogAlertsMuteActionsDuration = '',
@@ -405,9 +405,9 @@ else {
         "includeServiceHealth=$includeServiceHealthValue",
         "suppressionWindows=$suppressionWindowsCompact",
         "enableOffHoursSuppression=$enableOffHoursSuppressionValue",
-        "serviceHoursStart=$ServiceHoursStart",
-        "serviceHoursEnd=$ServiceHoursEnd",
-        "serviceHoursTimeZone=$ServiceHoursTimeZone",
+        "activeMonitoringHoursStart=$ActiveMonitoringHoursStart",
+        "activeMonitoringHoursEnd=$ActiveMonitoringHoursEnd",
+        "activeMonitoringHoursTimeZone=$ActiveMonitoringHoursTimeZone",
         "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
         "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
     )

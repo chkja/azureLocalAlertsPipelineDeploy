@@ -15,7 +15,7 @@
 // crossing midnight (startTime > endTime is a valid, documented pattern - the window then spans
 // from startTime on the matched day(s) through endTime on the FOLLOWING calendar day). That
 // still only covers weekday-evening -> next-weekday-morning; the two full non-working days
-// (assumed Saturday/Sunday) and the small gap from Sunday midnight to Monday's service-hours
+// (assumed Saturday/Sunday) and the small gap from Sunday midnight to Monday's active-monitoring-hours
 // start need their own explicit entries. See docs/service-tiers-and-alerts.md for the full
 // week-coverage walkthrough.
 //
@@ -27,14 +27,14 @@ param clusterResourceId string
 @description('Additional resource IDs to include in every rule\'s scopes (e.g. the subscription ID, to also cover the Premium-only subscription-wide Resource/Service Health alerts - not normally needed since this module is not used for Premium).')
 param additionalScopes array = []
 
-@description('Daily start of the committed service/working-hours window, "HH:mm:ss", assumed Monday-Friday. Notifications are suppressed before this time and after serviceHoursEnd.')
-param serviceHoursStart string = '07:00:00'
+@description('Daily start of the committed service/working-hours window, "HH:mm:ss", assumed Monday-Friday. Notifications are suppressed before this time and after activeMonitoringHoursEnd.')
+param activeMonitoringHoursStart string = '07:00:00'
 
 @description('Daily end of the committed service/working-hours window, "HH:mm:ss".')
-param serviceHoursEnd string = '17:00:00'
+param activeMonitoringHoursEnd string = '17:00:00'
 
-@description('Windows time zone name the service-hours window is evaluated in (e.g. "Romance Standard Time" for Copenhagen).')
-param serviceHoursTimeZone string = 'Romance Standard Time'
+@description('Windows time zone name the active-monitoring-hours window is evaluated in (e.g. "Romance Standard Time" for Copenhagen).')
+param activeMonitoringHoursTimeZone string = 'Romance Standard Time'
 
 @description('ISO 8601 date-time (no timezone suffix) from which this standing weekly schedule is effective.')
 param effectiveFrom string = '2026-01-01T00:00:00'
@@ -47,16 +47,16 @@ var ruleScopes = concat([clusterResourceId], additionalScopes)
 var commonSchedule = {
   effectiveFrom: effectiveFrom
   effectiveUntil: effectiveUntil
-  timeZone: serviceHoursTimeZone
+  timeZone: activeMonitoringHoursTimeZone
 }
 
-// 1. Every weekday evening through the following morning's service-hours start (crosses
+// 1. Every weekday evening through the following morning's active-monitoring-hours start (crosses
 //    midnight). Covers Mon 17:00->Tue 07:00 ... Fri 17:00->Sat 07:00 (using the default hours).
 resource weekdayEveningToMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
   name: 'apr-${clusterName}-offhours-weekday-evening'
   location: 'global'
   properties: {
-    description: 'Standing off-hours suppression: every weekday evening (after ${serviceHoursEnd}) through the following morning (${serviceHoursStart}).'
+    description: 'Standing off-hours suppression: every weekday evening (after ${activeMonitoringHoursEnd}) through the following morning (${activeMonitoringHoursStart}).'
     enabled: true
     scopes: ruleScopes
     actions: [
@@ -75,21 +75,21 @@ resource weekdayEveningToMorning 'Microsoft.AlertsManagement/actionRules@2021-08
             'Thursday'
             'Friday'
           ]
-          startTime: serviceHoursEnd
-          endTime: serviceHoursStart
+          startTime: activeMonitoringHoursEnd
+          endTime: activeMonitoringHoursStart
         }
       ]
     })
   }
 }
 
-// 2. Monday early morning, before service-hours start - not covered by #1 because Sunday is not
+// 2. Monday early morning, before active-monitoring-hours start - not covered by #1 because Sunday is not
 //    in its daysOfWeek list, so the crossing-midnight window never fires into Monday.
 resource mondayEarlyMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' = {
   name: 'apr-${clusterName}-offhours-monday-morning'
   location: 'global'
   properties: {
-    description: 'Standing off-hours suppression: Monday from midnight until service-hours start (${serviceHoursStart}).'
+    description: 'Standing off-hours suppression: Monday from midnight until active-monitoring-hours start (${activeMonitoringHoursStart}).'
     enabled: true
     scopes: ruleScopes
     actions: [
@@ -105,7 +105,7 @@ resource mondayEarlyMorning 'Microsoft.AlertsManagement/actionRules@2021-08-08' 
             'Monday'
           ]
           startTime: '00:00:00'
-          endTime: serviceHoursStart
+          endTime: activeMonitoringHoursStart
         }
       ]
     })

@@ -277,8 +277,8 @@ Advanced alerts are triaged "during working hours" - only Premium commits to 24/
 `modules/offHoursSuppression.bicep` implements this directly: for Basic and Advanced (controlled
 by the `enableOffHoursSuppression` parameter, default `true`; Premium ignores it and is always
 24/7), it deploys a **standing weekly** `Microsoft.AlertsManagement/actionRules` schedule that
-silences action-group notifications outside `serviceHoursStart`-`serviceHoursEnd` (default
-`07:00:00`-`17:00:00`), Monday-Friday, in the `serviceHoursTimeZone` (default `Romance Standard
+silences action-group notifications outside `activeMonitoringHoursStart`-`activeMonitoringHoursEnd` (default
+`07:00:00`-`17:00:00`), Monday-Friday, in the `activeMonitoringHoursTimeZone` (default `Romance Standard
 Time` / Copenhagen). Alert rules still evaluate around the clock in every tier - nothing is ever
 silently missed, and the full history remains visible/queryable - only the notification is
 suppressed outside the committed hours.
@@ -480,8 +480,8 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `includeServiceHealth` | `true` | Premium only - also deploy the subscription-wide Service Health activity log alert |
 | `suppressionWindows` | `[]` | All tiers - ad hoc maintenance-window suppression rules, see section 3 |
 | `enableOffHoursSuppression` | `true` (Basic/Advanced), `false` (Premium) | Standing weekly off-hours notification suppression, see section 3 |
-| `serviceHoursStart` / `serviceHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
-| `serviceHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the service-hours window |
+| `activeMonitoringHoursStart` / `activeMonitoringHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
+| `activeMonitoringHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the active-monitoring-hours window |
 | `logAlertsMuteActionsDuration` | `''` (disabled) | Advanced/Premium log alerts only - re-notification throttle, see section 3 |
 | `criticalServiceNames` (Bicep constant in `logAlerts.bicep`, not a parameter) | HciSvc/mochostagent/wssdcloudagent/wssdagent (short+display names) | Advanced/Premium critical-service-down watchdog - verify DisplayNames against your nodes and edit the variable directly if they differ |
 | `DcrResourceId` (script param, not a Bicep param) | `''` (auto-discover) | Advanced/Premium - DCR to extend with the new event log channels, see section 3 |

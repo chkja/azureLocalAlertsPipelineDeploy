@@ -58,9 +58,9 @@ param suppressionWindows = []
 // service description: "alerts will only be responded to during service window"). Alert rules
 // still evaluate 24/7 - only notifications are silenced outside these hours.
 param enableOffHoursSuppression = true
-param serviceHoursStart = '07:00:00'
-param serviceHoursEnd = '17:00:00'
-param serviceHoursTimeZone = 'Romance Standard Time'
+param activeMonitoringHoursStart = '07:00:00'
+param activeMonitoringHoursEnd = '17:00:00'
+param activeMonitoringHoursTimeZone = 'Romance Standard Time'
 
 // Optional throttle for log-based alerts (ignored - Basic has none): ISO 8601 duration (e.g.
 // 'PT1H') for repeat notifications while an alert remains unresolved. Empty = stateful/single-fire.

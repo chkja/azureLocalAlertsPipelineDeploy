@@ -100,13 +100,13 @@ param suppressionWindows array = []
 param enableOffHoursSuppression bool = true
 
 @description('Daily start of the committed service/working-hours window, "HH:mm:ss", Monday-Friday.')
-param serviceHoursStart string = '07:00:00'
+param activeMonitoringHoursStart string = '07:00:00'
 
 @description('Daily end of the committed service/working-hours window, "HH:mm:ss".')
-param serviceHoursEnd string = '17:00:00'
+param activeMonitoringHoursEnd string = '17:00:00'
 
-@description('Windows time zone name the service-hours window is evaluated in.')
-param serviceHoursTimeZone string = 'Romance Standard Time'
+@description('Windows time zone name the active-monitoring-hours window is evaluated in.')
+param activeMonitoringHoursTimeZone string = 'Romance Standard Time'
 
 @description('''
 Optional throttle for the Advanced/Premium log-based alerts: ISO 8601 duration (e.g. "PT1H") for
@@ -149,9 +149,9 @@ module alerts 'modules/alerts.bicep' = {
     includeServiceHealth: includeServiceHealth
     suppressionWindows: suppressionWindows
     enableOffHoursSuppression: enableOffHoursSuppression
-    serviceHoursStart: serviceHoursStart
-    serviceHoursEnd: serviceHoursEnd
-    serviceHoursTimeZone: serviceHoursTimeZone
+    activeMonitoringHoursStart: activeMonitoringHoursStart
+    activeMonitoringHoursEnd: activeMonitoringHoursEnd
+    activeMonitoringHoursTimeZone: activeMonitoringHoursTimeZone
     logAlertsMuteActionsDuration: logAlertsMuteActionsDuration
   }
   dependsOn: [

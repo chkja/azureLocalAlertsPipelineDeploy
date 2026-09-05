@@ -67,9 +67,9 @@ param suppressionWindows = []
 
 // Premium commits to 24/7 alert response under SLA - never suppress off-hours.
 param enableOffHoursSuppression = false
-param serviceHoursStart = '07:00:00'
-param serviceHoursEnd = '17:00:00'
-param serviceHoursTimeZone = 'Romance Standard Time'
+param activeMonitoringHoursStart = '07:00:00'
+param activeMonitoringHoursEnd = '17:00:00'
+param activeMonitoringHoursTimeZone = 'Romance Standard Time'
 
 // Optional throttle for the log-based alerts (heartbeat/volume health/error-rate): ISO 8601
 // duration (e.g. 'PT1H') for repeat notifications while an alert remains unresolved - useful for

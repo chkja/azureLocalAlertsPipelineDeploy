@@ -61,13 +61,13 @@ param suppressionWindows array = []
 param enableOffHoursSuppression bool = true
 
 @description('Daily start of the committed service/working-hours window, "HH:mm:ss", Monday-Friday. Used only when enableOffHoursSuppression is true and the tier is not Premium.')
-param serviceHoursStart string = '07:00:00'
+param activeMonitoringHoursStart string = '07:00:00'
 
 @description('Daily end of the committed service/working-hours window, "HH:mm:ss".')
-param serviceHoursEnd string = '17:00:00'
+param activeMonitoringHoursEnd string = '17:00:00'
 
-@description('Windows time zone name the service-hours window is evaluated in.')
-param serviceHoursTimeZone string = 'Romance Standard Time'
+@description('Windows time zone name the active-monitoring-hours window is evaluated in.')
+param activeMonitoringHoursTimeZone string = 'Romance Standard Time'
 
 @description('''
 Optional throttle for the Advanced/Premium log-based alerts (heartbeat, volume health, and the
@@ -190,9 +190,9 @@ module offHoursSuppression 'offHoursSuppression.bicep' = if (!isPremium && enabl
     // See the comment on suppressionRules above - same fix applies here (Advanced-tier log
     // alerts are scoped to the workspace, not the cluster).
     additionalScopes: isAdvancedOrPremium ? [logAnalyticsWorkspaceResourceId] : []
-    serviceHoursStart: serviceHoursStart
-    serviceHoursEnd: serviceHoursEnd
-    serviceHoursTimeZone: serviceHoursTimeZone
+    activeMonitoringHoursStart: activeMonitoringHoursStart
+    activeMonitoringHoursEnd: activeMonitoringHoursEnd
+    activeMonitoringHoursTimeZone: activeMonitoringHoursTimeZone
   }
 }
 
