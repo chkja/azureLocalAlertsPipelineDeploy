@@ -47,17 +47,25 @@ full explanation - same semantics apply here. Default: '' (disabled - stateful, 
 ''')
 param muteActionsDuration string = ''
 
-@description('''
-Substrings to match against the Windows Service Control Manager event message (System log,
-EventID 7031/7034/7036) for the critical-service-down watchdog alert. Includes both the short
-service name and a plausible display-name substring for each service, since the SCM event
-message shows the DisplayName, not the short name, and exact display names can vary slightly
-by Azure Local build. VERIFY against your own nodes before relying on this in production:
-`Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent | Select-Object Name, DisplayName`
-and adjust this list if your DisplayNames differ. Requires the "System" Windows Event Log
-channel to be collected by the Data Collection Rule - see docs/service-tiers-and-alerts.md.
-''')
-param criticalServiceNames array = [
+@description('Severity for the cluster quorum-loss / node-isolation and Hyper-V availability alerts.')
+param severityCluster int = 1
+
+@description('Severity for the critical-service-down watchdog alert.')
+param severityServiceWatchdog int = 1
+
+var clusterName = last(split(clusterResourceId, '/'))
+// Substrings to match against the Windows Service Control Manager event message (System log,
+// EventID 7031/7034/7036) for the critical-service-down watchdog alert. Includes both the short
+// service name and a plausible display-name substring for each service, since the SCM event
+// message shows the DisplayName, not the short name, and exact display names can vary slightly
+// by Azure Local build. Deliberately NOT a Bicep parameter (no .bicepparam/ARM override) - this
+// list is a template-owned constant tuned by editing this file directly, since it doesn't vary
+// per customer/tier the way thresholds and receivers do. VERIFY against your own nodes before
+// relying on this in production:
+// `Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent | Select-Object Name, DisplayName`
+// and adjust this list here if your DisplayNames differ. Requires the "System" Windows Event Log
+// channel to be collected by the Data Collection Rule - see docs/service-tiers-and-alerts.md.
+var criticalServiceNames = [
   'HciSvc'
   'Health Service'
   'mochostagent'
@@ -67,14 +75,6 @@ param criticalServiceNames array = [
   'wssdagent'
   'WSSD Agent'
 ]
-
-@description('Severity for the cluster quorum-loss / node-isolation and Hyper-V availability alerts.')
-param severityCluster int = 1
-
-@description('Severity for the critical-service-down watchdog alert.')
-param severityServiceWatchdog int = 1
-
-var clusterName = last(split(clusterResourceId, '/'))
 var criticalServiceNamesKql = join(map(criticalServiceNames, n => '\'${n}\''), ', ')
 var useMuteActionsDuration = !empty(muteActionsDuration)
 var effectiveAutoMitigate = useMuteActionsDuration ? false : autoMitigate
@@ -305,7 +305,7 @@ resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@202
 // REQUIRES the "System" event log channel to be collected by the DCR (Service Control Manager
 // source) - not collected by the default Azure Local Insights DCR. See
 // docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
-// TIP: verify criticalServiceNames matches your nodes' exact DisplayName - see param description.
+// TIP: verify criticalServiceNames matches your nodes' exact DisplayName - see the var comment above.
 // ---------------------------------------------------------------------------
 resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
   name: 'insqr-${clusterName}-critical-service-down'

@@ -66,6 +66,4 @@ param serviceHoursTimeZone = 'Romance Standard Time'
 // 'PT1H') for repeat notifications while an alert remains unresolved. Empty = stateful/single-fire.
 param logAlertsMuteActionsDuration = ''
 
-// Ignored - Basic has no log-based alerts, so the critical-service-watchdog list never applies.
-param criticalServiceNames = []
 param heartbeatMissingMinutes = 10

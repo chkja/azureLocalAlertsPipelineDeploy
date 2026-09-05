@@ -115,23 +115,6 @@ supported by Azure Monitor metric alerts. Default: '' (disabled - stateful, sing
 ''')
 param logAlertsMuteActionsDuration string = ''
 
-@description('''
-Substrings to match against Service Control Manager event messages for the critical-service-down
-watchdog alert (Advanced/Premium): HciSvc (Health Service) and the MOC/Arc Resource Bridge agents
-(mochostagent, wssdcloudagent, wssdagent). Requires the DCR to collect the "System" event log
-channel - see docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
-''')
-param criticalServiceNames array = [
-  'HciSvc'
-  'Health Service'
-  'mochostagent'
-  'MOC HostAgent'
-  'wssdcloudagent'
-  'WSSD Cloud Agent'
-  'wssdagent'
-  'WSSD Agent'
-]
-
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
@@ -170,7 +153,6 @@ module alerts 'modules/alerts.bicep' = {
     serviceHoursEnd: serviceHoursEnd
     serviceHoursTimeZone: serviceHoursTimeZone
     logAlertsMuteActionsDuration: logAlertsMuteActionsDuration
-    criticalServiceNames: criticalServiceNames
   }
   dependsOn: [
     rg

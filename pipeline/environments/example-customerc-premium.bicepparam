@@ -77,17 +77,4 @@ param serviceHoursTimeZone = 'Romance Standard Time'
 // Empty (default) = stateful/single-fire (one Fired, one Resolved notification).
 param logAlertsMuteActionsDuration = ''
 
-// Substrings matched against Service Control Manager events for the critical-service-down
-// watchdog alert (HciSvc/mochostagent/wssdcloudagent/wssdagent) - verify against your nodes'
-// exact DisplayName (Get-Service ... | Select-Object Name, DisplayName) and adjust if needed.
-param criticalServiceNames = [
-  'HciSvc'
-  'Health Service'
-  'mochostagent'
-  'MOC HostAgent'
-  'wssdcloudagent'
-  'WSSD Cloud Agent'
-  'wssdagent'
-  'WSSD Agent'
-]
 param heartbeatMissingMinutes = 10

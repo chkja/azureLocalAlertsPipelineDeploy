@@ -109,13 +109,6 @@
     Microsoft.Insights/metricAlerts) - those remain purely stateful regardless of this setting.
     Default '' (disabled).
 
-.PARAMETER CriticalServiceNamesJson
-    Advanced/Premium only. JSON array of substrings to match against Service Control Manager
-    event messages for the critical-service-down watchdog alert (HciSvc / mochostagent /
-    wssdcloudagent / wssdagent). Default covers short names and plausible display names - verify
-    against your own nodes (`Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent |
-    Select-Object Name, DisplayName`) and override if needed.
-
 .PARAMETER DcrResourceId
     ARM resource ID of the Data Collection Rule (Microsoft.Insights/dataCollectionRules) that
     collects Windows Event Logs for this cluster's nodes. Advanced/Premium only. When supplied
@@ -255,9 +248,6 @@ param(
     [string]$LogAlertsMuteActionsDuration = '',
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
-    [string]$CriticalServiceNamesJson = '["HciSvc","Health Service","mochostagent","MOC HostAgent","wssdcloudagent","WSSD Cloud Agent","wssdagent","WSSD Agent"]',
-
-    [Parameter(Mandatory = $false, ParameterSetName = 'ByValue')]
     [int]$HeartbeatMissingMinutes = 10,
 
     # Shared across both parameter sets: not Bicep template parameters, only used by this
@@ -320,11 +310,9 @@ if (-not $usingBicepParamFile) {
     # this re-validation applies when -BicepParamFile is used.
     Assert-JsonArray -Value $EmailReceiversJson -ParamName 'EmailReceiversJson'
     Assert-JsonArray -Value $WebhookReceiversJson -ParamName 'WebhookReceiversJson'
-    Assert-JsonArray -Value $CriticalServiceNamesJson -ParamName 'CriticalServiceNamesJson'
 
     $emailReceivers = @($EmailReceiversJson | ConvertFrom-Json)
     $webhookReceivers = @($WebhookReceiversJson | ConvertFrom-Json)
-    $criticalServiceNames = @($CriticalServiceNamesJson | ConvertFrom-Json)
     $suppressionWindows = @(Assert-SuppressionWindows -Json $SuppressionWindowsJson)
     Assert-IsoDuration -Value $LogAlertsMuteActionsDuration -ParamName 'LogAlertsMuteActionsDuration'
 
@@ -380,7 +368,6 @@ if (-not $usingBicepParamFile) {
     $emailReceiversCompact = ConvertTo-CompactJsonArray -Items $emailReceivers
     $webhookReceiversCompact = ConvertTo-CompactJsonArray -Items $webhookReceivers
     $suppressionWindowsCompact = ConvertTo-CompactJsonArray -Items $suppressionWindows
-    $criticalServiceNamesCompact = ConvertTo-CompactJsonArray -Items $criticalServiceNames
     $includeServiceHealthValue = $IncludeServiceHealth.ToString().ToLowerInvariant()
     $enableOffHoursSuppressionValue = $EnableOffHoursSuppression.ToString().ToLowerInvariant()
 }
@@ -422,7 +409,6 @@ else {
         "serviceHoursEnd=$ServiceHoursEnd",
         "serviceHoursTimeZone=$ServiceHoursTimeZone",
         "logAlertsMuteActionsDuration=$LogAlertsMuteActionsDuration",
-        "criticalServiceNames=$criticalServiceNamesCompact",
         "heartbeatMissingMinutes=$HeartbeatMissingMinutes"
     )
 }

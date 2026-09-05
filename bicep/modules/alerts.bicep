@@ -80,25 +80,6 @@ remain purely stateful regardless of this setting). Default: '' (disabled).
 ''')
 param logAlertsMuteActionsDuration string = ''
 
-@description('''
-Substrings to match against Service Control Manager event messages for the critical-service-down
-watchdog alert (Advanced/Premium). Default covers HciSvc (Health Service) and the MOC/Arc
-Resource Bridge agents (mochostagent, wssdcloudagent, wssdagent). See logAlerts.bicep param
-description for why both short names and display-name guesses are included, and why you should
-verify against your own nodes. Requires the DCR to collect the "System" event log channel - see
-docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
-''')
-param criticalServiceNames array = [
-  'HciSvc'
-  'Health Service'
-  'mochostagent'
-  'MOC HostAgent'
-  'wssdcloudagent'
-  'WSSD Cloud Agent'
-  'wssdagent'
-  'WSSD Agent'
-]
-
 var isAdvancedOrPremium = serviceTier == 'Advanced' || serviceTier == 'Premium'
 var isPremium = serviceTier == 'Premium'
 
@@ -164,7 +145,6 @@ module logAlerts 'logAlerts.bicep' = if (isAdvancedOrPremium) {
     includePremiumAlerts: isPremium
     severityPremium: severityPremium
     muteActionsDuration: logAlertsMuteActionsDuration
-    criticalServiceNames: criticalServiceNames
     severityCluster: severityHealth
     severityServiceWatchdog: severityHealth
   }

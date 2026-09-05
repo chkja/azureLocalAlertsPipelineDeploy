@@ -221,10 +221,10 @@ live resource, rather than bringing it into the Bicep template/stack:
    `performanceCounters`, `dataFlows`, `destinations`, and everything else untouched), and no-ops
    if all four queries are already present (safe to run on every pipeline execution).
 3. Runs only during an actual apply, **never during `-WhatIf`/validate** (no live mutation during
-   a validation-only run), and any failure here is a warning, not a deployment blocker - the
-   Bicep-deployed alerts still succeed, they just won't receive data for these specific channels
-   until the DCR is resolved (auto-discovery, an explicit `-DcrResourceId`, or a manual DCR
-   update).
+   a validation-only run). Discovery/merge failures now **stop the deployment** (throw) rather
+   than warn-and-continue: a deployment that's supposed to extend the DCR's event collection must
+   be able to trust that update actually happened, since alerts deployed without a confirmed DCR
+   update cannot be trusted to ever receive data.
 
 Set `-SkipDcrUpdate` (or leave `dcrResourceId` empty and no Arc node association exists) to opt
 out entirely if you'd rather manage the DCR's event collection yourself.
@@ -233,8 +233,11 @@ out entirely if you'd rather manage the DCR's event collection yourself.
 > message shows each service's *DisplayName*, not its short name, and exact display names can
 > vary slightly by Azure Local build. Run
 > `Get-Service -Name HciSvc, mochostagent, wssdcloudagent, wssdagent | Select-Object Name, DisplayName`
-> on a node and adjust the `criticalServiceNames` parameter/`criticalServiceNamesJson` pipeline
-> variable if your DisplayNames differ from the shipped defaults.
+> on a node and adjust the `criticalServiceNames` variable in `bicep/modules/logAlerts.bicep` if
+> your DisplayNames differ from the shipped defaults. This is a template-owned constant, not a
+> Bicep parameter or pipeline variable - it's deliberately not overridable per customer/tier
+> (unlike thresholds and receivers), since it's tied to the DCR's Windows Event Log collection
+> rather than something that varies by deployment.
 
 ### Config-as-code / drift prevention
 
@@ -480,7 +483,7 @@ which is also the source of the volume-health KQL used in `modules/logAlerts.bic
 | `serviceHoursStart` / `serviceHoursEnd` | `07:00:00` / `17:00:00` | Committed service/working-hours window, Monday-Friday |
 | `serviceHoursTimeZone` | `Romance Standard Time` | Windows time zone name for the service-hours window |
 | `logAlertsMuteActionsDuration` | `''` (disabled) | Advanced/Premium log alerts only - re-notification throttle, see section 3 |
-| `criticalServiceNames` | HciSvc/mochostagent/wssdcloudagent/wssdagent (short+display names) | Advanced/Premium critical-service-down watchdog - verify DisplayNames against your nodes |
+| `criticalServiceNames` (Bicep constant in `logAlerts.bicep`, not a parameter) | HciSvc/mochostagent/wssdcloudagent/wssdagent (short+display names) | Advanced/Premium critical-service-down watchdog - verify DisplayNames against your nodes and edit the variable directly if they differ |
 | `DcrResourceId` (script param, not a Bicep param) | `''` (auto-discover) | Advanced/Premium - DCR to extend with the new event log channels, see section 3 |
 | `evaluationFrequency` / `windowSize` | PT5M / PT15M | All alert rules |
 
