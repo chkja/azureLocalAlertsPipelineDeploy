@@ -14,12 +14,7 @@
 #
 #   One Validate job and one Deploy job are generated PER ENTRY at compile time (via `${{ each }}`
 #   template expressions) - so every push to main (or every manual/scheduled run) validates and
-#   deploys every committed customer, not just one. This intentionally replaced an earlier design
-#   where a single queue-time `environmentFile` parameter picked exactly one customer per run -
-#   that meant a triggered (automatic) run always used the parameter's default value, so pushing a
-#   change to one customer's files could silently deploy a DIFFERENT customer instead. Generating
-#   one job per entry removes that class of bug entirely: everything committed here always gets
-#   (re)applied together.
+#   deploys every committed customer together, not just one.
 #
 # Config-as-code / drift prevention
 #   Because Bicep deployments are declarative/idempotent, every run re-applies exactly what's

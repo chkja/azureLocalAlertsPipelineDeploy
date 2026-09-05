@@ -260,14 +260,10 @@ Each cluster/tenant is defined by:
 `pipeline/azure-pipelines.yml` triggers on every push to `main` that touches `bicep/**` or
 `pipeline/environments/**`, and generates one Validate job and one Deploy job **per entry** in the
 `environments` parameter at compile time (`${{ each }}` template expressions) - so every committed
-customer is validated/deployed together on every run, not just one. (An earlier design used a
-single queue-time `environmentFile` parameter to pick exactly one customer per run; that meant a
-triggered/automatic run always deployed whichever customer was the parameter's *default*,
-regardless of which customer's files the push actually changed - a bug this per-entry job
-generation removes entirely.) Because Bicep deployments are declarative, each run re-applies
-exactly what's committed - reverting any manual portal changes on the next run instead of letting
-configuration drift persist silently. The deny-delete deployment stack setting above adds a second
-layer of protection on top of pipeline-driven redeployment.
+customer is validated/deployed together on every run, not just one. Because Bicep deployments are
+declarative, each run re-applies exactly what's committed - reverting any manual portal changes on
+the next run instead of letting configuration drift persist silently. The deny-delete deployment
+stack setting above adds a second layer of protection on top of pipeline-driven redeployment.
 
 To onboard a new cluster:
 1. Copy an existing `<name>.bicepparam` file in `pipeline/environments/` and fill in the tenant's
