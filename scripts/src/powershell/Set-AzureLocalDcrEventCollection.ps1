@@ -11,17 +11,19 @@ function Set-AzureLocalDcrEventCollection {
         customer's onboarding/Arc setup, associated with every Arc node in the cluster), not
         something this stack should track or risk deleting via ActionOnUnmanage.
 
-        Non-fatal on any failure - logs a warning and returns, since the alerts themselves still
-        deploy successfully; they just won't receive data for these specific channels until the
-        DCR is extended.
+        Throws on any failure (invalid DcrResourceId, unreadable DCR, missing windowsEventLogs
+        data source, or a failed PUT) instead of warning and continuing - a deployment that's
+        supposed to extend a DCR's event collection must be able to trust that update actually
+        happened; silently deploying log alerts that will never receive data is worse than
+        stopping with a clear, actionable error. Callers wanting to skip DCR handling entirely
+        should use -SkipDcrUpdate on Deploy-AzureLocalAlerts.ps1 instead.
     #>
     param([string]$DcrResourceId)
 
     $apiVersion = '2023-03-11'
 
     if ($DcrResourceId -notmatch '(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Insights/dataCollectionRules/[^/]+$') {
-        Write-Warning "DcrResourceId '$DcrResourceId' is not a valid Data Collection Rule resource ID - skipping DCR event collection update."
-        return
+        throw "DcrResourceId '$DcrResourceId' is not a valid Data Collection Rule resource ID - cannot extend its event collection. Supply a valid -DcrResourceId, or -SkipDcrUpdate to bypass DCR handling entirely."
     }
 
     Write-Host "==> Checking Data Collection Rule event collection: $DcrResourceId" -ForegroundColor Cyan
@@ -35,18 +37,15 @@ function Set-AzureLocalDcrEventCollection {
 
     $dcrJson = az rest --method get --uri "https://management.azure.com${DcrResourceId}?api-version=$apiVersion" -o json 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dcrJson)) {
-        Write-Warning "Could not read Data Collection Rule '$DcrResourceId' (not found, or not accessible with current credentials) - skipping DCR event collection update. The new cluster-quorum/service-watchdog/Hyper-V log alerts will deploy but won't receive data until this is resolved."
-        return
+        throw "Could not read Data Collection Rule '$DcrResourceId' (not found, or not accessible with current credentials) - cannot extend its event collection, so the new cluster-quorum/service-watchdog/Hyper-V log alerts cannot be trusted to receive data. Fix -DcrResourceId, or use -SkipDcrUpdate to bypass DCR handling entirely."
     }
 
     $dcr = $dcrJson | ConvertFrom-Json
     if (-not $dcr.properties.dataSources) {
-        Write-Warning "Data Collection Rule '$DcrResourceId' has no dataSources - skipping DCR event collection update (unexpected shape for an Azure Local Insights DCR)."
-        return
+        throw "Data Collection Rule '$DcrResourceId' has no dataSources (unexpected shape for an Azure Local Insights DCR) - cannot extend its event collection. Use -SkipDcrUpdate to bypass DCR handling entirely if this is expected."
     }
     if (-not $dcr.properties.dataSources.windowsEventLogs -or @($dcr.properties.dataSources.windowsEventLogs).Count -eq 0) {
-        Write-Warning "Data Collection Rule '$DcrResourceId' has no windowsEventLogs data source configured - skipping DCR event collection update. Add an eventLogsDataSource manually, or re-run once one exists."
-        return
+        throw "Data Collection Rule '$DcrResourceId' has no windowsEventLogs data source configured - cannot extend its event collection. Add an eventLogsDataSource manually and re-run, or use -SkipDcrUpdate to bypass DCR handling entirely."
     }
 
     $eventDataSource = $dcr.properties.dataSources.windowsEventLogs[0]
@@ -87,8 +86,7 @@ function Set-AzureLocalDcrEventCollection {
         $putBody | ConvertTo-Json -Depth 20 | Set-Content -Path $tempFile -Encoding utf8
         az rest --method put --uri "https://management.azure.com${DcrResourceId}?api-version=$apiVersion" --body "@$tempFile" -o none
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Failed to update Data Collection Rule '$DcrResourceId' with the merged event collection - the new log alerts will deploy but won't receive data until this is resolved manually."
-            return
+            throw "Failed to update Data Collection Rule '$DcrResourceId' with the merged event collection - the new log alerts cannot be trusted to receive data until this is resolved. Re-run once the underlying `az rest` PUT failure is fixed, or use -SkipDcrUpdate to bypass DCR handling entirely."
         }
         Write-Host "==> Data Collection Rule updated successfully." -ForegroundColor Green
     }
