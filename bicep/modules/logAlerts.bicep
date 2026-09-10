@@ -10,6 +10,8 @@ param logAnalyticsWorkspaceResourceId string
 @description('ARM resource ID of the monitored Microsoft.AzureStackHCI/clusters resource. Used to scope KQL to this cluster only.')
 param clusterResourceId string
 
+param serviceTier string
+
 @description('Azure region for the alert rule metadata.')
 param location string
 
@@ -78,15 +80,26 @@ var criticalServiceNames = [
 var criticalServiceNamesKql = join(map(criticalServiceNames, n => '\'${n}\''), ', ')
 var useMuteActionsDuration = !empty(muteActionsDuration)
 var effectiveAutoMitigate = useMuteActionsDuration ? false : autoMitigate
+// Short, name-safe tier tag used in every alert rule's resource name (e.g. insqr-contoso01-prem-...).
+// A human-readable form ("[Premium]") is prepended to each rule's displayName separately below.
+var tierAbbrev = serviceTier == 'Premium' ? 'prem' : 'adv'
+var tierTag = '[${serviceTier}]'
+// Delivered as a structured field in the Common Alert Schema webhook/Logic App payload
+// (data.alertContext.customProperties) - see docs/service-tiers-and-alerts.md - so automation
+// can branch on tier without parsing the rule name or displayName string.
+var tierCustomProperties = {
+  ServiceTier: serviceTier
+  ClusterName: clusterName
+}
 
 // ---------------------------------------------------------------------------
 // Advanced + Premium: node heartbeat / connectivity loss
 // ---------------------------------------------------------------------------
 resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-node-heartbeat-missing'
+  name: 'insqr-${clusterName}-${tierAbbrev}-node-heartbeat-missing'
   location: location
   properties: {
-    displayName: 'Azure Local - Node heartbeat missing (${clusterName})'
+    displayName: 'Azure Local - Node heartbeat missing (${clusterName}) ${tierTag}'
     description: 'Fires when an Azure Local node has not sent a Heartbeat within ${heartbeatMissingMinutes} minutes, indicating the node/AMA agent is unreachable.'
     severity: severityHealth
     enabled: true
@@ -113,6 +126,7 @@ resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-p
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -125,10 +139,10 @@ resource nodeHeartbeatAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-p
 // https://chkja.dk/blog/azure-local-insights-part2-logalert
 // ---------------------------------------------------------------------------
 resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-volume-health'
+  name: 'insqr-${clusterName}-${tierAbbrev}-volume-health'
   location: location
   properties: {
-    displayName: 'Azure Local - Volume health degraded (${clusterName})'
+    displayName: 'Azure Local - Volume health degraded (${clusterName}) ${tierTag}'
     description: 'Fires when a cluster volume reports a health fault (Status > 0) via Microsoft-Windows-Health/Operational event correlation.'
     severity: severityStorage
     enabled: true
@@ -155,6 +169,7 @@ resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -168,10 +183,10 @@ resource volumeHealthAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
 // see docs/service-tiers-and-alerts.md "Exploration commands" section.
 // ---------------------------------------------------------------------------
 resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = if (includePremiumAlerts) {
-  name: 'insqr-${clusterName}-error-event-rate'
+  name: 'insqr-${clusterName}-${tierAbbrev}-error-event-rate'
   location: location
   properties: {
-    displayName: 'Azure Local - Elevated Error event rate (${clusterName})'
+    displayName: 'Azure Local - Elevated Error event rate (${clusterName}) ${tierTag}'
     description: 'Premium enhanced monitoring: fires when Error-level Windows events across the cluster nodes exceed baseline volume within the evaluation window.'
     severity: severityPremium
     enabled: true
@@ -198,6 +213,7 @@ resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -214,10 +230,10 @@ resource errorEventRateAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
 // https://learn.microsoft.com/azure/azure-local/manage/health-service-faults
 // ---------------------------------------------------------------------------
 resource generalHealthFaultAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-general-health-fault'
+  name: 'insqr-${clusterName}-${tierAbbrev}-general-health-fault'
   location: location
   properties: {
-    displayName: 'Azure Local - Health Service fault detected (${clusterName})'
+    displayName: 'Azure Local - Health Service fault detected (${clusterName}) ${tierTag}'
     description: 'Fires when the built-in Health Service reports a non-Volume fault (PhysicalDisk, StoragePool, Server, Cluster, Network, VM, etc.) via Microsoft-Windows-Health/Operational.'
     severity: severityStorage
     enabled: true
@@ -244,6 +260,7 @@ resource generalHealthFaultAlert 'Microsoft.Insights/scheduledQueryRules@2023-03
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -260,10 +277,10 @@ resource generalHealthFaultAlert 'Microsoft.Insights/scheduledQueryRules@2023-03
 // docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
 // ---------------------------------------------------------------------------
 resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-quorum-node-isolation'
+  name: 'insqr-${clusterName}-${tierAbbrev}-quorum-node-isolation'
   location: location
   properties: {
-    displayName: 'Azure Local - Cluster quorum loss or node isolation (${clusterName})'
+    displayName: 'Azure Local - Cluster quorum loss or node isolation (${clusterName}) ${tierTag}'
     description: 'Fires on Failover Clustering EventID 1205 (quorum lost) or 1573 (node forcibly removed / isolated - split-brain). Requires the FailoverClustering event channel to be collected by the DCR.'
     severity: severityCluster
     enabled: true
@@ -290,6 +307,7 @@ resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@202
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -308,10 +326,10 @@ resource clusterQuorumIsolationAlert 'Microsoft.Insights/scheduledQueryRules@202
 // TIP: verify criticalServiceNames matches your nodes' exact DisplayName - see the var comment above.
 // ---------------------------------------------------------------------------
 resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-critical-service-down'
+  name: 'insqr-${clusterName}-${tierAbbrev}-critical-service-down'
   location: location
   properties: {
-    displayName: 'Azure Local - Critical platform service down (${clusterName})'
+    displayName: 'Azure Local - Critical platform service down (${clusterName}) ${tierTag}'
     description: 'Fires when HciSvc (Health Service) or a MOC/Arc Resource Bridge agent service (mochostagent, wssdcloudagent, wssdagent) crashes or stops unexpectedly, per Service Control Manager events.'
     severity: severityServiceWatchdog
     enabled: true
@@ -338,6 +356,7 @@ resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-0
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null
@@ -353,10 +372,10 @@ resource criticalServiceDownAlert 'Microsoft.Insights/scheduledQueryRules@2023-0
 // Insights DCR. See docs/service-tiers-and-alerts.md "Extended event log collection (DCR)" section.
 // ---------------------------------------------------------------------------
 resource hyperVAvailabilityAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: 'insqr-${clusterName}-hyperv-availability'
+  name: 'insqr-${clusterName}-${tierAbbrev}-hyperv-availability'
   location: location
   properties: {
-    displayName: 'Azure Local - Hyper-V VM availability issue (${clusterName})'
+    displayName: 'Azure Local - Hyper-V VM availability issue (${clusterName}) ${tierTag}'
     description: 'Fires on Hyper-V VMMS Admin EventID 10650 (VM Management Service error) or Hyper-V High-Availability Admin EventID 12400 (live migration failed / lost network connectivity).'
     severity: severityCluster
     enabled: true
@@ -383,6 +402,7 @@ resource hyperVAvailabilityAlert 'Microsoft.Insights/scheduledQueryRules@2023-03
       actionGroups: [
         actionGroupId
       ]
+      customProperties: tierCustomProperties
     }
     autoMitigate: effectiveAutoMitigate
     muteActionsDuration: useMuteActionsDuration ? muteActionsDuration : null

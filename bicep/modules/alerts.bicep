@@ -102,6 +102,7 @@ module metricAlerts 'metricAlerts.bicep' = {
   name: 'deploy-metric-alerts'
   params: {
     clusterResourceId: clusterResourceId
+    serviceTier: serviceTier
     // Deliberately NOT passing `location` here - metricAlerts.bicep defaults it to 'global',
     // which is required for single-resource ("resource-level") static-threshold metric alerts.
     // Passing the deployment's actual Azure region instead causes ARM to classify these as
@@ -135,6 +136,7 @@ module logAlerts 'logAlerts.bicep' = if (isAdvancedOrPremium) {
   params: {
     logAnalyticsWorkspaceResourceId: logAnalyticsWorkspaceResourceId
     clusterResourceId: clusterResourceId
+    serviceTier: serviceTier
     location: location
     actionGroupId: actionGroup.outputs.actionGroupId
     heartbeatMissingMinutes: heartbeatMissingMinutes

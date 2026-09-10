@@ -7,6 +7,8 @@
 @description('Resource ID of the Microsoft.AzureStackHCI/clusters resource to monitor.')
 param clusterResourceId string
 
+param serviceTier string
+
 @description('Azure region for the alert rule metadata (must match, or be a region that supports, the target resource region).')
 param location string = 'global'
 
@@ -59,15 +61,26 @@ param networkOutThresholdBytesPerSecond int = 200000000000
 param autoMitigate bool = true
 
 var clusterName = last(split(clusterResourceId, '/'))
+// Short, name-safe tier tag used in every alert rule's resource name (e.g. inma-contoso01-prem-...).
+// A human-readable form ("[Premium]") is prepended to each rule's description separately below.
+var tierAbbrev = serviceTier == 'Basic' ? 'basic' : (serviceTier == 'Advanced' ? 'adv' : 'prem')
+var tierTag = '[${serviceTier}]'
+// Delivered as a structured field in the Common Alert Schema webhook/Logic App payload
+// (data.alertContext.customProperties) - see docs/service-tiers-and-alerts.md - so automation
+// can branch on tier without parsing the rule name or description string.
+var tierWebhookProperties = {
+  ServiceTier: serviceTier
+  ClusterName: clusterName
+}
 
 // ---------------------------------------------------------------------------
 // Basic + Advanced + Premium: baseline cluster health / storage degradation
 // ---------------------------------------------------------------------------
 resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: 'inma-${clusterName}-storage-degraded'
+  name: 'inma-${clusterName}-${tierAbbrev}-storage-degraded'
   location: location
   properties: {
-    description: 'Fires when one or more physical drives in the storage pool are missing or have failed. Baseline cluster health signal - available in all service tiers.'
+    description: '${tierTag} Fires when one or more physical drives in the storage pool are missing or have failed. Baseline cluster health signal - available in all service tiers.'
     severity: severityHealth
     enabled: true
     scopes: [
@@ -93,6 +106,7 @@ resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
@@ -102,10 +116,10 @@ resource storageDegradedAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
 // Advanced + Premium only: capacity monitoring (CPU / Memory)
 // ---------------------------------------------------------------------------
 resource cpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-cpu-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-cpu-high'
   location: location
   properties: {
-    description: 'Fires when average cluster node CPU usage exceeds ${cpuThresholdPercent}% for the evaluation window.'
+    description: '${tierTag} Fires when average cluster node CPU usage exceeds ${cpuThresholdPercent}% for the evaluation window.'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -131,16 +145,17 @@ resource cpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapa
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
 }
 
 resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-memory-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-memory-high'
   location: location
   properties: {
-    description: 'Fires when average cluster node memory usage exceeds ${memoryThresholdPercent}% for the evaluation window.'
+    description: '${tierTag} Fires when average cluster node memory usage exceeds ${memoryThresholdPercent}% for the evaluation window.'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -166,6 +181,7 @@ resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeC
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
@@ -178,10 +194,10 @@ resource memoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeC
 // per volume rather than only on a cluster-wide aggregate.
 // ---------------------------------------------------------------------------
 resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-storage-capacity-low'
+  name: 'inma-${clusterName}-${tierAbbrev}-storage-capacity-low'
   location: location
   properties: {
-    description: 'Fires when a volume\'s available space drops below ${storageFreeBytesThreshold} bytes for the evaluation window. Threshold is absolute bytes - see param description for why (no ratio metric is available).'
+    description: '${tierTag} Fires when a volume\'s available space drops below ${storageFreeBytesThreshold} bytes for the evaluation window. Threshold is absolute bytes - see param description for why (no ratio metric is available).'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -216,6 +232,7 @@ resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if 
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
@@ -229,10 +246,10 @@ resource storageCapacityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if 
 // cluster-wide aggregates (no dimension splitting), matching Microsoft's out-of-the-box defaults.
 // ---------------------------------------------------------------------------
 resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-memory-available-bytes-low'
+  name: 'inma-${clusterName}-${tierAbbrev}-memory-available-bytes-low'
   location: location
   properties: {
-    description: 'Fires when available memory drops below ${memoryAvailableBytesThreshold} bytes for the evaluation window. Microsoft-recommended alert (metric "Memory\\Available Bytes"), complementary to the percentage-based memory alert.'
+    description: '${tierTag} Fires when available memory drops below ${memoryAvailableBytesThreshold} bytes for the evaluation window. Microsoft-recommended alert (metric "Memory\\Available Bytes"), complementary to the percentage-based memory alert.'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -258,16 +275,17 @@ resource memoryAvailableBytesAlert 'Microsoft.Insights/metricAlerts@2018-03-01' 
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
 }
 
 resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-volume-latency-read-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-volume-latency-read-high'
   location: location
   properties: {
-    description: 'Fires when average volume read latency exceeds ${volumeLatencyReadThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Read"; documented default: 500 ms).'
+    description: '${tierTag} Fires when average volume read latency exceeds ${volumeLatencyReadThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Read"; documented default: 500 ms).'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -293,16 +311,17 @@ resource volumeLatencyReadAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = i
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
 }
 
 resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeCapacityMetrics) {
-  name: 'inma-${clusterName}-volume-latency-write-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-volume-latency-write-high'
   location: location
   properties: {
-    description: 'Fires when average volume write latency exceeds ${volumeLatencyWriteThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Write"; documented default: 500 ms).'
+    description: '${tierTag} Fires when average volume write latency exceeds ${volumeLatencyWriteThresholdSeconds}s for the evaluation window. Microsoft-recommended alert (metric "Cluster CSVFS\\Avg. sec/Write"; documented default: 500 ms).'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -328,16 +347,17 @@ resource volumeLatencyWriteAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = 
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
 }
 
 resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
-  name: 'inma-${clusterName}-network-in-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-network-in-high'
   location: location
   properties: {
-    description: 'Fires when inbound network throughput exceeds ${networkInThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Received/sec"; documented default: 500 GB/s).'
+    description: '${tierTag} Fires when inbound network throughput exceeds ${networkInThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Received/sec"; documented default: 500 GB/s).'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -363,16 +383,17 @@ resource networkInAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (inclu
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }
 }
 
 resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (includeNetworkMetrics) {
-  name: 'inma-${clusterName}-network-out-high'
+  name: 'inma-${clusterName}-${tierAbbrev}-network-out-high'
   location: location
   properties: {
-    description: 'Fires when outbound network throughput exceeds ${networkOutThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Sent/sec"; documented default: 200 GB/s).'
+    description: '${tierTag} Fires when outbound network throughput exceeds ${networkOutThresholdBytesPerSecond} bytes/sec for the evaluation window. Microsoft-recommended alert (metric "Network Adapter\\Bytes Sent/sec"; documented default: 200 GB/s).'
     severity: severityCapacity
     enabled: true
     scopes: [
@@ -398,6 +419,7 @@ resource networkOutAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (incl
     actions: [
       {
         actionGroupId: actionGroupId
+        webHookProperties: tierWebhookProperties
       }
     ]
   }

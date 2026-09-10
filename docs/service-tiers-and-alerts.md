@@ -373,6 +373,34 @@ Suppression rules match on the resource ID(s) in `modules/suppressionRules.bicep
 fired alert, not which alert rule created it, so a cluster-scoped suppression rule also silences
 the Premium subscription-wide Resource Health alert for that same cluster during the window.
 
+### Identifying the service tier from a firing alert
+
+Alert rule definitions (e.g. `storage-degraded`, `node-heartbeat-missing`) are shared code reused
+across tiers - the same KQL/metric criteria deploy for every Basic, Advanced, or Premium cluster
+that uses them. Since each cluster is deployed under exactly one tier, every alert rule instance
+deployed for that cluster is stamped with the tier known at deploy time, so anyone (or any
+automation) receiving a notification can tell which tier fired it without needing to separately
+look up the customer/cluster:
+
+- **Resource name**: every alert rule name includes a tier tag, e.g.
+  `inma-<cluster>-prem-storage-degraded` or `insqr-<cluster>-adv-node-heartbeat-missing`
+  (`basic` / `adv` / `prem`). Visible in the portal's alert rule list, and in any ITSM ticket
+  title that includes the firing rule's name.
+- **Description / displayName**: prefixed with a human-readable tag, e.g.
+  `[Premium] Fires when available memory drops below...` (metric alerts) or
+  `Azure Local - Node heartbeat missing (contoso01) [Advanced]` (log alerts' `displayName`).
+  This is what shows up in the email subject/body - no payload parsing needed for a human triager.
+- **Structured payload for automation**: metric alerts set `actions[].webHookProperties` and log
+  alerts set `actions.customProperties` to `{ ServiceTier: '<tier>', ClusterName: '<cluster>' }`.
+  Both flow into the Common Alert Schema JSON delivered to webhook/Logic App receivers as
+  `data.alertContext.customProperties.ServiceTier` - so a Freshservice inbound webhook rule (or
+  Logic App) can branch on tier (e.g. route Premium straight to the 24/7 on-call queue) without
+  regex-parsing the alert name or description.
+
+Rule definitions themselves are **not** duplicated per tier (no `storageDegradedAlertBasic` /
+`...Advanced` / `...Premium` clones) - only the tier tag stamped on each deployed instance varies,
+since the underlying logic and thresholds are identical across tiers that use a given rule.
+
 ### Notification frequency - avoiding a flood while an issue is unresolved
 
 By default, **every alert rule in every tier is stateful and fires exactly once per incident**:
